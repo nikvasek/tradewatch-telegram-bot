@@ -10,13 +10,13 @@
 6. **НЕ** добавляйте README, .gitignore или LICENSE (у нас уже есть)
 7. Нажмите "Create repository"
 
-## 2. Подключение к локальному репозиторию
+## 2. ✅ ГОТОВО! Код уже загружен
 
-После создания репозитория GitHub покажет инструкции. Выполните:
+Репозиторий создан и код успешно загружен:
 
 ```bash
 cd /Users/Mac/BotTelegramm/Alegro
-git remote add origin https://github.com/nik-vasek/tradewatch-telegram-bot.git
+git remote add origin https://github.com/nikvasek/tradewatch-telegram-bot.git
 git branch -M main
 git push -u origin main
 ```
@@ -33,7 +33,7 @@ git push -u origin main
 1. Зайдите на https://railway.app
 2. Нажмите "New Project"
 3. Выберите "Deploy from GitHub repo"
-4. Найдите и выберите `nik-vasek/tradewatch-telegram-bot`
+4. Найдите и выберите `nikvasek/tradewatch-telegram-bot`
 5. Добавьте переменные окружения:
    ```
    BOT_TOKEN=ваш_токен_от_botfather
@@ -45,7 +45,7 @@ git push -u origin main
 
 ## 5. Результат
 
-✅ Репозиторий на GitHub: `https://github.com/nik-vasek/tradewatch-telegram-bot`
+✅ Репозиторий на GitHub: `https://github.com/nikvasek/tradewatch-telegram-bot`
 ✅ Автоматическое развертывание на Railway
 ✅ Бот работает 24/7 в облаке с поддержкой Selenium
 
