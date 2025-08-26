@@ -55,6 +55,26 @@ def get_railway_chrome_options():
     
     return options
 
+def get_chrome_service():
+    """
+    Получить Service для ChromeDriver в зависимости от окружения
+    """
+    # Проверяем, работаем ли в Docker с selenium/standalone-chrome
+    if os.path.exists('/usr/bin/chromedriver'):
+        print("🐳 Используем системный ChromeDriver из Docker образа")
+        return Service('/usr/bin/chromedriver')
+    elif os.path.exists('/opt/selenium/chromedriver-*/chromedriver'):
+        # В selenium образах ChromeDriver может быть здесь
+        import glob
+        chromedriver_paths = glob.glob('/opt/selenium/chromedriver-*/chromedriver')
+        if chromedriver_paths:
+            print(f"🐳 Используем ChromeDriver из Selenium образа: {chromedriver_paths[0]}")
+            return Service(chromedriver_paths[0])
+    
+    # Fallback - используем WebDriver Manager
+    print("📦 Используем WebDriver Manager для скачивания ChromeDriver")
+    return Service(ChromeDriverManager().install())
+
 def clear_ean_field_thoroughly(driver, ean_field, batch_number):
     """
     КРИТИЧЕСКИ ВАЖНО: Тщательно очищает поле EAN кодов несколькими способами
@@ -453,7 +473,7 @@ def process_ean_codes_batch(ean_codes_batch, download_dir, batch_number=1, headl
     options.add_experimental_option("prefs", prefs)
     
     # Инициализация драйвера
-    service = Service(ChromeDriverManager().install())
+    service = get_chrome_service()
     driver = webdriver.Chrome(service=service, options=options)
     
     try:
@@ -1181,7 +1201,7 @@ def process_batch_with_new_browser(ean_codes_batch, download_dir, batch_number, 
     options.add_experimental_option("prefs", prefs)
     
     # 🆕 СОЗДАЕМ НОВЫЙ ДРАЙВЕР для каждой группы
-    service = Service(ChromeDriverManager().install())
+    service = get_chrome_service()
     driver = webdriver.Chrome(service=service, options=options)
     
     try:
@@ -1464,7 +1484,7 @@ def process_supplier_file_with_tradewatch_old_version(supplier_file_path, downlo
         options.add_experimental_option("prefs", prefs)
         
         # Инициализация драйвера один раз
-        service = Service(ChromeDriverManager().install())
+        service = get_chrome_service()
         driver = webdriver.Chrome(service=service, options=options)
         
         try:
@@ -1688,7 +1708,7 @@ def process_batch_in_separate_browser(ean_codes_batch, download_dir, batch_numbe
         chrome_options.add_experimental_option("prefs", prefs)
         
         # Создаем драйвер
-        service = Service(ChromeDriverManager().install())
+        service = get_chrome_service()
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
         print(f"Создан браузер для группы {batch_number}")
