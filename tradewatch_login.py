@@ -56,31 +56,60 @@ def get_railway_chrome_options(batch_number=None):
     
     # Проверяем переменные окружения Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        print("🚂 Запуск на Railway - используем оптимизированные настройки")
-        options.add_argument("--memory-pressure-off")
-        options.add_argument("--max_old_space_size=4096")
-        # Дополнительные настройки для экономии памяти на Railway
-        options.add_argument("--disable-background-timer-throttling")
-        options.add_argument("--disable-backing-store-limit")
-        options.add_argument("--disable-hang-monitor")
-        options.add_argument("--disable-client-side-phishing-detection")
-        options.add_argument("--disable-popup-blocking")
-        options.add_argument("--disable-prompt-on-repost")
-        options.add_argument("--disable-renderer-backgrounding")
-        options.add_argument("--disable-ipc-flooding-protection")
+        is_hobby = os.getenv('RAILWAY_PLAN') == 'hobby' or os.getenv('RAILWAY_MEMORY_LIMIT', '512') != '512'
+        
+        if is_hobby:
+            print("� Railway Hobby план - используем настройки для максимальной скорости")
+            # Настройки для скорости на Hobby плане
+            options.add_argument("--max_old_space_size=8192")  # Больше памяти
+            options.add_argument("--enable-fast-unload")
+            options.add_argument("--aggressive-cache-discard")
+        else:
+            print("🚂 Railway бесплатный план - используем настройки для стабильности")
+            options.add_argument("--memory-pressure-off")
+            options.add_argument("--max_old_space_size=4096")
+            # Дополнительные настройки для экономии памяти на бесплатном плане
+            options.add_argument("--disable-background-timer-throttling")
+            options.add_argument("--disable-backing-store-limit")
+            options.add_argument("--disable-hang-monitor")
+            options.add_argument("--disable-client-side-phishing-detection")
+            options.add_argument("--disable-popup-blocking")
+            options.add_argument("--disable-prompt-on-repost")
+            options.add_argument("--disable-renderer-backgrounding")
+            options.add_argument("--disable-ipc-flooding-protection")
     
     return options
 
 def get_batch_size():
     """
-    Получить оптимальный размер батча в зависимости от окружения
+    Получить оптимальный размер батча в зависимости от окружения и плана
     """
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        print("🚂 Railway обнаружен - используем батчи по 50 кодов для максимальной стабильности")
-        return 50  # Еще меньше для лучшей стабильности
+        # Определяем план Railway по доступной памяти или переменной окружения
+        if os.getenv('RAILWAY_PLAN') == 'hobby' or os.getenv('RAILWAY_MEMORY_LIMIT', '512') != '512':
+            print("� Railway Hobby план - используем батчи по 300 кодов для максимальной скорости")
+            return 300  # Больше батчи для Hobby плана
+        else:
+            print("🚂 Railway бесплатный план - используем батчи по 50 кодов для стабильности")
+            return 50
     else:
         print("💻 Локальное окружение - используем батчи по 450 кодов")
         return 450
+
+def get_parallel_sessions():
+    """
+    Получить количество параллельных сессий для обработки
+    """
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+        if os.getenv('RAILWAY_PLAN') == 'hobby' or os.getenv('RAILWAY_MEMORY_LIMIT', '512') != '512':
+            print("🚀 Hobby план - используем 3 параллельные сессии")
+            return 3  # 3 параллельные сессии для Hobby
+        else:
+            print("🚂 Бесплатный план - используем 1 сессию")
+            return 1
+    else:
+        print("💻 Локальное окружение - используем 2 сессии")
+        return 2
 
 def cleanup_chrome_temp_dirs():
     """
@@ -1066,11 +1095,113 @@ def process_batch_in_session(driver, ean_codes_batch, download_dir, batch_number
         return None
 
 
+def process_batches_sequential(batches, download_dir, headless, progress_callback):
+    """Последовательная обработка батчей (для бесплатного плана)"""
+    downloaded_files = []
+    processed_count = 0
+    
+    for i, batch in enumerate(batches, 1):
+        print(f"\n🆕 СОЗДАЕМ НОВУЮ СЕССИЮ БРАУЗЕРА для группы {i}/{len(batches)}")
+        
+        # Очищаем временные директории Chrome перед новой сессией
+        cleanup_chrome_temp_dirs()
+        
+        # Обрабатываем группу в новой сессии браузера
+        result = process_batch_with_new_browser(batch, download_dir, i, headless)
+        
+        if result:
+            downloaded_files.append(result)
+            processed_count += len(batch)
+            print(f"✅ Группа {i} обработана успешно в новой сессии")
+            
+            # Обновляем прогресс через callback
+            if progress_callback:
+                try:
+                    progress_callback(processed_count)
+                except Exception as e:
+                    print(f"Ошибка в progress_callback: {e}")
+        else:
+            print(f"❌ Ошибка при обработке группы {i} в новой сессии")
+    
+    return downloaded_files
+
+
+def process_batch_worker(args):
+    """Рабочая функция для обработки одного батча в параллельном режиме"""
+    batch, download_dir, batch_index, headless = args
+    
+    try:
+        print(f"\n🚀 ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Обрабатываем {len(batch)} EAN кодов")
+        
+        # Очищаем временные директории Chrome перед новой сессией
+        cleanup_chrome_temp_dirs()
+        
+        # Обрабатываем группу в новой сессии браузера
+        result = process_batch_with_new_browser(batch, download_dir, batch_index, headless)
+        
+        if result:
+            print(f"✅ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Группа обработана успешно")
+            return result, len(batch)
+        else:
+            print(f"❌ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Ошибка при обработке")
+            return None, 0
+            
+    except Exception as e:
+        print(f"❌ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Исключение - {e}")
+        return None, 0
+
+
+def process_batches_parallel(batches, download_dir, headless, progress_callback, max_workers):
+    """Параллельная обработка батчей (для Hobby плана)"""
+    downloaded_files = []
+    processed_count = 0
+    
+    # Подготавливаем аргументы для воркеров
+    worker_args = []
+    for i, batch in enumerate(batches, 1):
+        worker_args.append((batch, download_dir, i, headless))
+    
+    print(f"🚀 ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА: Запускаем {max_workers} воркеров для {len(batches)} батчей")
+    
+    # Используем ThreadPoolExecutor для параллельной обработки
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Отправляем все задачи
+        future_to_batch = {executor.submit(process_batch_worker, args): i for i, args in enumerate(worker_args, 1)}
+        
+        # Собираем результаты по мере выполнения
+        for future in concurrent.futures.as_completed(future_to_batch):
+            batch_num = future_to_batch[future]
+            try:
+                result, batch_size = future.result()
+                if result:
+                    downloaded_files.append(result)
+                    processed_count += batch_size
+                    print(f"✅ ПАРАЛЛЕЛЬНО: Батч {batch_num} завершен, обработано {batch_size} кодов")
+                    
+                    # Обновляем прогресс через callback
+                    if progress_callback:
+                        try:
+                            progress_callback(processed_count)
+                        except Exception as e:
+                            print(f"Ошибка в progress_callback: {e}")
+                else:
+                    print(f"❌ ПАРАЛЛЕЛЬНО: Батч {batch_num} не удалось обработать")
+                    
+            except Exception as exc:
+                print(f"❌ ПАРАЛЛЕЛЬНО: Батч {batch_num} вызвал исключение: {exc}")
+    
+    print(f"🏁 ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ЗАВЕРШЕНА: {len(downloaded_files)} файлов из {len(batches)} батчей")
+    return downloaded_files
+
+
 def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, headless=True, progress_callback=None):
     """
     Обрабатывает файл поставщика: извлекает EAN коды, 
     разбивает на группы и получает данные из TradeWatch
-    КАЖДАЯ ГРУППА обрабатывается в НОВОЙ сессии браузера для исключения кеширования
+    
+    АВТОМАТИЧЕСКИ ВЫБИРАЕТ СТРАТЕГИЮ:
+    - Hobby план: параллельная обработка с большими батчами
+    - Бесплатный план: последовательная обработка с малыми батчами
     
     Args:
         supplier_file_path: путь к файлу поставщика
@@ -1133,33 +1264,15 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
                     print(f"Не удалось удалить файл {old_file}: {e}")
                     pass
         
-        # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Обрабатываем каждую группу в новой сессии браузера
-        print(f"🔥 НОВАЯ ЛОГИКА: Каждая группа обрабатывается в отдельной сессии браузера")
-        downloaded_files = []
-        processed_count = 0
+        # � ОПТИМИЗАЦИЯ ДЛЯ HOBBY ПЛАНА: Выбираем стратегию обработки
+        parallel_sessions = get_parallel_sessions()
         
-        for i, batch in enumerate(batches, 1):
-            print(f"\n🆕 СОЗДАЕМ НОВУЮ СЕССИЮ БРАУЗЕРА для группы {i}/{len(batches)}")
-            
-            # Очищаем временные директории Chrome перед новой сессией
-            cleanup_chrome_temp_dirs()
-            
-            # Обрабатываем группу в новой сессии браузера
-            result = process_batch_with_new_browser(batch, download_dir, i, headless)
-            
-            if result:
-                downloaded_files.append(result)
-                processed_count += len(batch)
-                print(f"✅ Группа {i} обработана успешно в новой сессии")
-                
-                # Обновляем прогресс через callback
-                if progress_callback:
-                    try:
-                        progress_callback(processed_count)
-                    except Exception as e:
-                        print(f"Ошибка в progress_callback: {e}")
-            else:
-                print(f"❌ Ошибка при обработке группы {i} в новой сессии")
+        if parallel_sessions > 1:
+            print(f"🚀 HOBBY ПЛАН: Параллельная обработка {parallel_sessions} сессий")
+            downloaded_files = process_batches_parallel(batches, download_dir, headless, progress_callback, parallel_sessions)
+        else:
+            print(f"🔥 БАЗОВЫЙ ПЛАН: Последовательная обработка")
+            downloaded_files = process_batches_sequential(batches, download_dir, headless, progress_callback)
         
         print(f"\n🏁 Обработка завершена. Загружено {len(downloaded_files)} файлов из {len(batches)} групп")
         
