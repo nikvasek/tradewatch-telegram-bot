@@ -13,6 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Создание символических ссылок
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
+# Поиск и настройка ChromeDriver
+RUN find /opt -name "chromedriver*" -type f -executable 2>/dev/null | head -1 | xargs -I {} ln -sf {} /usr/bin/chromedriver || echo "ChromeDriver not found in /opt, trying other locations" \
+    && find /usr -name "chromedriver*" -type f -executable 2>/dev/null | head -1 | xargs -I {} ln -sf {} /usr/bin/chromedriver || echo "ChromeDriver will be downloaded by WebDriver Manager" \
+    && which chromedriver || echo "ChromeDriver not found in PATH"
+
 WORKDIR /app
 
 # Копирование и установка зависимостей
