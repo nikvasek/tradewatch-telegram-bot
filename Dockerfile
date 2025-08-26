@@ -1,4 +1,4 @@
-# Railway Hobby Plan - Selenium Chrome Dockerfile (обновлено для исправления сборки)
+# Railway Hobby Plan - Selenium Chrome Dockerfile (с ускорением 4x) - v2.0
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
