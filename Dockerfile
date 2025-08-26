@@ -1,4 +1,4 @@
-# Минимальный Dockerfile для Railway (для быстрого тестирования)
+# Railway Hobby Plan - Selenium Chrome Dockerfile (обновлено для исправления сборки)
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
