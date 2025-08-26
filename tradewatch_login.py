@@ -1235,14 +1235,14 @@ def process_batch_with_new_browser(ean_codes_batch, download_dir, batch_number, 
         
         # Вводим email
         email_field.clear()
-        email_field.send_keys("TRADEWATCH_EMAIL")
+        email_field.send_keys(TRADEWATCH_EMAIL)
         
         # Ищем поле для пароля
         password_field = driver.find_element(By.NAME, "j_password")
         
         # Вводим пароль
         password_field.clear()
-        password_field.send_keys("Trade-watch1")
+        password_field.send_keys(TRADEWATCH_PASSWORD)
         
         # Ищем кнопку входа
         login_button = driver.find_element(By.NAME, "btnLogin")
@@ -1501,14 +1501,14 @@ def process_supplier_file_with_tradewatch_old_version(supplier_file_path, downlo
             
             # Вводим email
             email_field.clear()
-            email_field.send_keys("TRADEWATCH_EMAIL")
+            email_field.send_keys(TRADEWATCH_EMAIL)
             
             # Ищем поле для пароля
             password_field = driver.find_element(By.NAME, "j_password")
             
             # Вводим пароль
             password_field.clear()
-            password_field.send_keys("Trade-watch1")
+            password_field.send_keys(TRADEWATCH_PASSWORD)
             
             # Ищем кнопку входа
             login_button = driver.find_element(By.NAME, "btnLogin")
@@ -1722,12 +1722,12 @@ def process_batch_in_separate_browser(ean_codes_batch, download_dir, batch_numbe
         # Вводим логин
         username_field = wait.until(EC.presence_of_element_located((By.NAME, "username")))
         username_field.clear()
-        username_field.send_keys("TRADEWATCH_EMAIL")
+        username_field.send_keys(TRADEWATCH_EMAIL)
         
         # Вводим пароль
         password_field = driver.find_element(By.NAME, "password")
         password_field.clear()
-        password_field.send_keys("Trade-watch1")
+        password_field.send_keys(TRADEWATCH_PASSWORD)
         
         # Нажимаем кнопку входа
         login_button = driver.find_element(By.NAME, "btnLogin")
