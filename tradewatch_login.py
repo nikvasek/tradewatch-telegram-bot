@@ -23,11 +23,15 @@ TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
 def is_hobby_plan():
     """Определяет, используется ли Railway Hobby план"""
+    # Принудительно включаем Hobby режим для ускорения
+    # TODO: Установить RAILWAY_PLAN=hobby в Railway Dashboard
+    
     # Проверяем наличие переменной окружения или другой индикации Hobby плана
     hobby_indicators = [
         os.environ.get('RAILWAY_PLAN') == 'hobby',
         os.environ.get('MEMORY_LIMIT', '512') != '512',  # Больше памяти = Hobby
         'HOBBY' in os.environ.get('DEPLOYMENT_TYPE', '').upper(),
+        True  # ВРЕМЕННО: Принудительно включаем Hobby режим
     ]
     return any(hobby_indicators)
 
