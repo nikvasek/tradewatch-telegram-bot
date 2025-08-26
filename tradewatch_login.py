@@ -52,8 +52,28 @@ def get_railway_chrome_options():
         print("🚂 Запуск на Railway - используем оптимизированные настройки")
         options.add_argument("--memory-pressure-off")
         options.add_argument("--max_old_space_size=4096")
+        # Дополнительные настройки для экономии памяти на Railway
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backing-store-limit")
+        options.add_argument("--disable-hang-monitor")
+        options.add_argument("--disable-client-side-phishing-detection")
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--disable-prompt-on-repost")
+        options.add_argument("--disable-renderer-backgrounding")
+        options.add_argument("--disable-ipc-flooding-protection")
     
     return options
+
+def get_batch_size():
+    """
+    Получить оптимальный размер батча в зависимости от окружения
+    """
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+        print("🚂 Railway обнаружен - используем батчи по 100 кодов для экономии памяти")
+        return 100
+    else:
+        print("💻 Локальное окружение - используем батчи по 450 кодов")
+        return 450
 
 def get_chrome_service():
     """
@@ -1062,8 +1082,8 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
             print("Нет EAN кодов для обработки")
             return []
         
-        # Разбиваем на группы по 450 кодов
-        batch_size = 450
+        # Разбиваем на группы оптимального размера
+        batch_size = get_batch_size()
         batches = [ean_codes[i:i + batch_size] for i in range(0, len(ean_codes), batch_size)]
         
         print(f"Разбиваем на {len(batches)} групп по {batch_size} кодов")
@@ -1432,8 +1452,8 @@ def process_supplier_file_with_tradewatch_old_version(supplier_file_path, downlo
             print("Нет EAN кодов для обработки")
             return []
         
-        # Разбиваем на группы по 450 кодов
-        batch_size = 450
+        # Разбиваем на группы оптимального размера
+        batch_size = get_batch_size()
         batches = [ean_codes[i:i + batch_size] for i in range(0, len(ean_codes), batch_size)]
         
         print(f"Разбиваем на {len(batches)} групп по {batch_size} кодов")
@@ -1931,8 +1951,8 @@ def process_supplier_file_with_tradewatch_interruptible(supplier_file_path, down
             print("Нет EAN кодов для обработки")
             return []
         
-        # Разбиваем на группы по 450 кодов
-        batch_size = 450
+        # Разбиваем на группы оптимального размера
+        batch_size = get_batch_size()
         batches = [ean_codes[i:i + batch_size] for i in range(0, len(ean_codes), batch_size)]
         
         print(f"Разбиваем на {len(batches)} групп по {batch_size} кодов")
