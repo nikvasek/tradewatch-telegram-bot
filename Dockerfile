@@ -1,17 +1,23 @@
-# Простейший Dockerfile для Railway - без Selenium для быстрого тестирования
-FROM python:3.11-slim
+# Минимальный Dockerfile для Railway (для быстрого тестирования)
+FROM selenium/standalone-chrome:latest
 
-# Установка минимальных зависимостей
+# Переключение на root для установки Python
+USER root
+
+# Установка Python и pip
 RUN apt-get update && apt-get install -y \
-    wget \
-    curl \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# Создание символических ссылок
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 WORKDIR /app
 
-# Копирование и установка Python зависимостей
+# Копирование и установка зависимостей
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Копирование проекта
 COPY . .
@@ -21,6 +27,7 @@ RUN mkdir -p temp_files
 
 # Переменные окружения
 ENV PYTHONUNBUFFERED=1
+ENV DISPLAY=:99
 
 # Запуск
 CMD ["python", "telegram_bot.py"]
