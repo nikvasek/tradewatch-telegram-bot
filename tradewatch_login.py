@@ -8,6 +8,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 import os
 import glob
+import shutil
 import pandas as pd
 import hashlib
 from pathlib import Path
@@ -20,11 +21,17 @@ from selenium.webdriver.common.window import WindowTypes
 TRADEWATCH_EMAIL = os.getenv("TRADEWATCH_EMAIL", "TRADEWATCH_EMAIL")
 TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
-def get_railway_chrome_options():
+def get_railway_chrome_options(batch_number=None):
     """
     Получить настройки Chrome для Railway deployment
     """
     options = webdriver.ChromeOptions()
+    
+    # Уникальная директория для каждой сессии
+    if batch_number:
+        user_data_dir = f"/tmp/chrome_user_data_{batch_number}_{int(time.time())}"
+        options.add_argument(f"--user-data-dir={user_data_dir}")
+        print(f"🔧 Используем уникальную директорию: {user_data_dir}")
     
     # Базовые настройки для headless режима
     options.add_argument("--headless")
@@ -69,11 +76,28 @@ def get_batch_size():
     Получить оптимальный размер батча в зависимости от окружения
     """
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        print("🚂 Railway обнаружен - используем батчи по 100 кодов для экономии памяти")
-        return 100
+        print("🚂 Railway обнаружен - используем батчи по 50 кодов для максимальной стабильности")
+        return 50  # Еще меньше для лучшей стабильности
     else:
         print("💻 Локальное окружение - используем батчи по 450 кодов")
         return 450
+
+def cleanup_chrome_temp_dirs():
+    """
+    Очищает временные директории Chrome
+    """
+    try:
+        import glob
+        temp_dirs = glob.glob("/tmp/chrome_user_data_*")
+        for temp_dir in temp_dirs:
+            try:
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                print(f"🧹 Очищена временная директория: {temp_dir}")
+            except:
+                pass
+    except:
+        pass
 
 def get_chrome_service():
     """
@@ -465,7 +489,7 @@ def process_ean_codes_batch(ean_codes_batch, download_dir, batch_number=1, headl
     # Настройка драйвера Chrome для Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
         # Используем Railway-оптимизированные настройки
-        options = get_railway_chrome_options()
+        options = get_railway_chrome_options(batch_number)
         print("🚂 Railway режим: используем headless Chrome")
     else:
         # Локальная разработка
@@ -1116,6 +1140,9 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
         
         for i, batch in enumerate(batches, 1):
             print(f"\n🆕 СОЗДАЕМ НОВУЮ СЕССИЮ БРАУЗЕРА для группы {i}/{len(batches)}")
+            
+            # Очищаем временные директории Chrome перед новой сессией
+            cleanup_chrome_temp_dirs()
             
             # Обрабатываем группу в новой сессии браузера
             result = process_batch_with_new_browser(batch, download_dir, i, headless)
@@ -1993,6 +2020,9 @@ def process_supplier_file_with_tradewatch_interruptible(supplier_file_path, down
                 progress_callback(f"🔄 Обрабатываю группу {i}/{len(batches)} ({len(batch)} EAN кодов)...")
             
             print(f"\n🆕 СОЗДАЕМ НОВУЮ СЕССИЮ БРАУЗЕРА для группы {i}/{len(batches)}")
+            
+            # Очищаем временные директории Chrome перед новой сессией
+            cleanup_chrome_temp_dirs()
             
             # Обрабатываем группу в новой сессии браузера
             result = process_batch_with_new_browser(batch, download_dir, i, headless)
