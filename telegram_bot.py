@@ -12,9 +12,19 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from telegram.constants import ParseMode
 import pandas as pd
 
+# Проверяем доступность Selenium и выбираем соответствующий модуль
+try:
+    from selenium import webdriver
+    SELENIUM_AVAILABLE = True
+    from tradewatch_login import process_supplier_file_with_tradewatch
+    print("✅ Selenium доступен - TradeWatch интеграция активна")
+except ImportError:
+    SELENIUM_AVAILABLE = False
+    from tradewatch_fallback import download_from_tradewatch
+    print("❌ Selenium недоступен - работаем без TradeWatch интеграции")
+
 # Импортируем наши функции для обработки Excel
 from merge_excel_with_calculations import process_supplier_with_tradewatch_auto
-from tradewatch_login import process_supplier_file_with_tradewatch
 
 # Настройка логирования
 logging.basicConfig(

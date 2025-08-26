@@ -9,7 +9,17 @@ from openpyxl.utils import get_column_letter
 from openpyxl.formatting.rule import ColorScaleRule
 from datetime import datetime
 import config
-from tradewatch_login import process_supplier_file_with_tradewatch
+
+# Проверяем доступность Selenium и выбираем соответствующий модуль
+try:
+    from selenium import webdriver
+    SELENIUM_AVAILABLE = True
+    from tradewatch_login import process_supplier_file_with_tradewatch
+    print("✅ Excel processor: Selenium доступен")
+except ImportError:
+    SELENIUM_AVAILABLE = False
+    from tradewatch_fallback import download_from_tradewatch
+    print("❌ Excel processor: Selenium недоступен - fallback режим")
 
 def format_ean_to_13_digits(ean_value):
     """
@@ -923,7 +933,19 @@ def process_supplier_with_tradewatch_auto(supplier_file_path, temp_dir, progress
         
         # Обрабатываем файл поставщика и получаем файлы TradeWatch
         print("Извлекаем EAN коды и обрабатываем через TradeWatch...")
-        tradewatch_files = process_supplier_file_with_tradewatch(supplier_file_path, download_dir, progress_callback=progress_callback)
+        
+        if SELENIUM_AVAILABLE:
+            tradewatch_files = process_supplier_file_with_tradewatch(supplier_file_path, download_dir, progress_callback=progress_callback)
+        else:
+            # Fallback режим - возвращаем пустой результат с информативным сообщением
+            if progress_callback:
+                progress_callback("❌ TradeWatch недоступен без Selenium")
+            
+            return {
+                'success': False,
+                'error': 'TradeWatch интеграция недоступна без Selenium.\nБот работает в ограниченном режиме - можете использовать только обработку Excel файлов без анализа конкурентов.',
+                'message': 'Для полной функциональности необходимо развертывание с Selenium'
+            }
         
         if not tradewatch_files:
             return {
