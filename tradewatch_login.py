@@ -11,6 +11,7 @@ import glob
 import shutil
 import pandas as pd
 import hashlib
+import uuid
 from pathlib import Path
 import threading
 import concurrent.futures
@@ -23,16 +24,31 @@ TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
 def is_hobby_plan():
     """Определяет, используется ли Railway Hobby план"""
-    # Принудительно включаем Hobby режим для ускорения
-    # TODO: Установить RAILWAY_PLAN=hobby в Railway Dashboard
-    
-    # Проверяем наличие переменной окружения или другой индикации Hobby плана
-    hobby_indicators = [
-        os.environ.get('RAILWAY_PLAN') == 'hobby',
-        os.environ.get('MEMORY_LIMIT', '512') != '512',  # Больше памяти = Hobby
-        'HOBBY' in os.environ.get('DEPLOYMENT_TYPE', '').upper(),
-        True  # ВРЕМЕННО: Принудительно включаем Hobby режим
-    ]
+    # Проверяем переменные окружения Railway для определения плана
+    railway_plan = os.environ.get('RAILWAY_PLAN', '').lower()
+    if railway_plan == 'hobby':
+        return True
+
+    # Проверяем по объему памяти (Hobby имеет больше памяти)
+    memory_limit = os.environ.get('MEMORY_LIMIT', '512')
+    if memory_limit not in ['512', '512MB', '512mb']:
+        return True
+
+    # Проверяем по другим индикаторам
+    deployment_type = os.environ.get('DEPLOYMENT_TYPE', '').upper()
+    if 'HOBBY' in deployment_type:
+        return True
+
+    # Проверяем по CPU лимитам (Hobby имеет больше CPU)
+    cpu_limit = os.environ.get('CPU_LIMIT', '0.5')
+    try:
+        if float(cpu_limit) > 0.5:
+            return True
+    except:
+        pass
+
+    # Если ничего не найдено, считаем что это бесплатный план
+    return False
 
 def get_railway_chrome_options(batch_number=None):
     """
@@ -69,18 +85,23 @@ def get_railway_chrome_options(batch_number=None):
     
     # Проверяем переменные окружения Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        is_hobby = os.getenv('RAILWAY_PLAN') == 'hobby' or os.getenv('RAILWAY_MEMORY_LIMIT', '512') != '512'
+        is_hobby = is_hobby_plan()  # Используем нашу функцию определения плана
         
         if is_hobby:
-            print("� Railway Hobby план - используем настройки для максимальной скорости")
+            print("🚀 Railway Hobby план - используем настройки для максимальной скорости")
             # Настройки для скорости на Hobby плане
-            options.add_argument("--max_old_space_size=8192")  # Больше памяти
+            options.add_argument("--max_old_space_size=1024MB")  # Больше памяти для Hobby
             options.add_argument("--enable-fast-unload")
             options.add_argument("--aggressive-cache-discard")
+            options.add_argument("--enable-parallel-downloading")  # Параллельная загрузка
+            options.add_argument("--enable-quic")  # QUIC протокол для скорости
+            options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
+            options.add_argument("--disable-background-media-download")  # Отключаем ненужное
+            options.add_argument("--disable-component-extensions-with-background-pages")
         else:
             print("🚂 Railway бесплатный план - используем настройки для стабильности")
             options.add_argument("--memory-pressure-off")
-            options.add_argument("--max_old_space_size=4096")
+            options.add_argument("--max_old_space_size=512MB")
             # Дополнительные настройки для экономии памяти на бесплатном плане
             options.add_argument("--disable-background-timer-throttling")
             options.add_argument("--disable-backing-store-limit")
@@ -100,11 +121,11 @@ def get_batch_size():
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
         # Используем нашу новую функцию is_hobby_plan()
         if is_hobby_plan():
-            print("🚀 Railway Hobby план - используем батчи по 200 кодов для максимальной скорости")
-            return 200  # Большие батчи для Hobby плана
+            print("🚀 Railway Hobby план - используем батчи по 400 кодов для максимальной скорости")
+            return 400  # Увеличенные батчи для Hobby плана
         else:
-            print("🚂 Railway бесплатный план - используем батчи по 600 кодов")
-            return 600   # Увеличенные батчи для компенсации отсутствия параллельности
+            print("🚂 Railway бесплатный план - используем батчи по 400 кодов")
+            return 400   # Увеличенные батчи для бесплатного плана
     else:
         print("💻 Локальное окружение - используем батчи по 300 кодов")
         return 300
@@ -116,14 +137,14 @@ def get_parallel_sessions():
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
         # Используем нашу функцию is_hobby_plan() вместо прямой проверки переменных
         if is_hobby_plan():
-            print("🚀 Hobby план - используем 4 параллельные сессии для максимальной скорости")
-            return 4  # 4 параллельные сессии для Hobby плана (максимальное ускорение)
+            print("🚀 Hobby план - используем 6 параллельные сессии для максимальной скорости")
+            return 6  # 6 параллельные сессии для Hobby плана (максимальное ускорение)
         else:
-            print("🚂 Бесплатный план - используем 1 сессию (параллельность вызывает ошибки)")
-            return 1  # 1 сессия для стабильности на бесплатном плане
+            print("🚂 Бесплатный план - используем 1 сессию (последовательная обработка)")
+            return 1  # Бесплатный план - последовательная обработка для стабильности
     else:
-        print("💻 Локальное окружение - используем 1 сессию")
-        return 1
+        print("💻 Локальное окружение - используем 2 сессии")
+        return 2
 
 def cleanup_chrome_temp_dirs():
     """
@@ -628,11 +649,11 @@ def process_ean_codes_batch(ean_codes_batch, download_dir, batch_number=1, headl
                 
                 # Ждем обработки
                 print("Ждем обработки запроса...")
-                time.sleep(3)  # Уменьшено с 5 до 3 секунд
+                time.sleep(5)
                 
                 # Ждем появления результатов
                 print("Ждем появления результатов...")
-                time.sleep(3)  # Уменьшено с 5 до 3 секунд
+                time.sleep(5)  # Увеличиваем время ожидания результатов
                 
                 # Ищем кнопку "Eksport do XLS"
                 try:
@@ -645,7 +666,7 @@ def process_ean_codes_batch(ean_codes_batch, download_dir, batch_number=1, headl
                     print("Ждем загрузки файла...")
                     
                     # Ждем появления файла с проверкой каждые 2 секунды
-                    max_wait_time = 45  # Максимальное время ожидания 45 секунд (уменьшено для ускорения)
+                    max_wait_time = 60  # Максимальное время ожидания 60 секунд
                     wait_interval = 2   # Проверяем каждые 2 секунды
                     waited_time = 0
                     
@@ -703,7 +724,7 @@ def process_ean_codes_batch(ean_codes_batch, download_dir, batch_number=1, headl
                         export_button.click()
                         
                         # Ждем с проверкой завершения скачивания
-                        max_wait_time = 45  # Уменьшено для ускорения
+                        max_wait_time = 60
                         wait_interval = 2
                         waited_time = 0
                         
@@ -864,7 +885,7 @@ def process_batch_in_session(driver, ean_codes_batch, download_dir, batch_number
         
         # Ждем обработки
         print("Ждем обработки запроса...")
-        time.sleep(3)  # Уменьшено с 5 до 3 секунд
+        time.sleep(5)
         
         # Ждем появления результатов
         print("Ждем появления результатов...")
@@ -925,7 +946,7 @@ def process_batch_in_session(driver, ean_codes_batch, download_dir, batch_number
             # Если клик успешен, ждем скачивания
             # Ждем появления файла с проверкой каждые 2 секунды
             print("Ждем загрузки файла...")
-            max_wait_time = 45  # Уменьшено для ускорения
+            max_wait_time = 60
             wait_interval = 2
             waited_time = 0
             
@@ -1039,7 +1060,7 @@ def process_batch_in_session(driver, ean_codes_batch, download_dir, batch_number
                     
                 # Если альтернативный метод сработал, ждем файл
                 print("Ждем загрузки файла...")
-                max_wait_time = 45  # Уменьшено для ускорения
+                max_wait_time = 60
                 wait_interval = 2
                 waited_time = 0
                 
@@ -1140,29 +1161,38 @@ def process_batches_sequential(batches, download_dir, headless, progress_callbac
     return downloaded_files
 
 
-def process_batch_worker(args):
-    """Рабочая функция для обработки одного батча в параллельном режиме"""
-    batch, download_dir, batch_index, headless = args
-    
+def process_batch_worker_isolated(args):
+    """Рабочая функция для обработки одного батча в изолированном пространстве"""
+    batch, base_download_dir, batch_index, headless = args
+
+    # Создаем уникальную директорию для этой сессии
+    session_id = str(uuid.uuid4())[:8]
+    isolated_dir = os.path.join(base_download_dir, f"session_{session_id}")
+    os.makedirs(isolated_dir, exist_ok=True)
+
     try:
-        print(f"\n🚀 ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Обрабатываем {len(batch)} EAN кодов")
-        
-        # Очищаем временные директории Chrome перед новой сессией
+        print(f"\n🚀 ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Обрабатываем {len(batch)} EAN кодов в {isolated_dir}")
+
+        # Очищаем временные директории Chrome
         cleanup_chrome_temp_dirs()
-        
+
         # Обрабатываем группу в новой сессии браузера
-        result = process_batch_with_new_browser(batch, download_dir, batch_index, headless)
-        
+        result = process_batch_with_new_browser_isolated(batch, isolated_dir, batch_index, headless)
+
         if result:
-            print(f"✅ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Группа обработана успешно")
-            return result, len(batch)
+            print(f"✅ ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Группа обработана успешно")
+            return result, len(batch), isolated_dir
         else:
-            print(f"❌ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Ошибка при обработке")
-            return None, 0
-            
+            print(f"❌ ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Ошибка при обработке")
+            # Очищаем пустую директорию
+            shutil.rmtree(isolated_dir, ignore_errors=True)
+            return None, 0, None
+
     except Exception as e:
-        print(f"❌ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Исключение - {e}")
-        return None, 0
+        print(f"❌ ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Исключение - {e}")
+        # Очищаем директорию при ошибке
+        shutil.rmtree(isolated_dir, ignore_errors=True)
+        return None, 0, None
 
 
 def process_batches_parallel(batches, download_dir, headless, progress_callback, max_workers):
@@ -1206,6 +1236,101 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
     
     print(f"🏁 ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ЗАВЕРШЕНА: {len(downloaded_files)} файлов из {len(batches)} батчей")
     return downloaded_files
+
+
+def process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, max_workers):
+    """Параллельная обработка батчей в изолированных пространствах"""
+    downloaded_files = []
+    processed_count = 0
+    isolated_dirs = []
+
+    # Подготавливаем аргументы для воркеров
+    worker_args = []
+    for i, batch in enumerate(batches, 1):
+        worker_args.append((batch, download_dir, i, headless))
+
+    print(f"🚀 ИЗОЛИРОВАННАЯ ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА: Запускаем {max_workers} воркеров для {len(batches)} батчей")
+
+    # Используем ThreadPoolExecutor для параллельной обработки
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Отправляем все задачи
+        future_to_batch = {executor.submit(process_batch_worker_isolated, args): i for i, args in enumerate(worker_args, 1)}
+
+        # Собираем результаты по мере выполнения
+        for future in concurrent.futures.as_completed(future_to_batch):
+            batch_num = future_to_batch[future]
+            try:
+                result, batch_size, isolated_dir = future.result()
+                if result:
+                    downloaded_files.append(result)
+                    processed_count += batch_size
+                    if isolated_dir:
+                        isolated_dirs.append(isolated_dir)
+                    print(f"✅ ИЗОЛИРОВАННО: Батч {batch_num} завершен, обработано {batch_size} кодов")
+
+                    # Обновляем прогресс через callback
+                    if progress_callback:
+                        try:
+                            progress_callback(processed_count)
+                        except Exception as e:
+                            print(f"Ошибка в progress_callback: {e}")
+                else:
+                    print(f"❌ ИЗОЛИРОВАННО: Батч {batch_num} не удалось обработать")
+
+            except Exception as exc:
+                print(f"❌ ИЗОЛИРОВАННО: Батч {batch_num} вызвал исключение: {exc}")
+
+    # Объединяем результаты из изолированных директорий
+    if isolated_dirs:
+        merged_files = merge_isolated_results(download_dir, isolated_dirs, progress_callback)
+        downloaded_files.extend(merged_files)
+
+    print(f"🏁 ИЗОЛИРОВАННАЯ ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ЗАВЕРШЕНА: {len(downloaded_files)} файлов")
+    return downloaded_files
+
+
+def merge_isolated_results(base_download_dir, isolated_dirs, progress_callback=None):
+    """
+    Объединяет результаты из изолированных директорий в основную
+
+    Args:
+        base_download_dir: основная директория для результатов
+        isolated_dirs: список изолированных директорий
+        progress_callback: функция для обновления прогресса
+    """
+    print(f"\n🔄 ОБЪЕДИНЕНИЕ РЕЗУЛЬТАТОВ: {len(isolated_dirs)} изолированных директорий")
+
+    merged_files = []
+
+    for i, isolated_dir in enumerate(isolated_dirs):
+        if not os.path.exists(isolated_dir):
+            continue
+
+        # Ищем файлы в изолированной директории
+        files = glob.glob(os.path.join(isolated_dir, "*.xlsx"))
+
+        for file_path in files:
+            # Копируем файл в основную директорию с новым именем
+            filename = os.path.basename(file_path)
+            new_filename = f"merged_{i+1}_{filename}"
+            new_filepath = os.path.join(base_download_dir, new_filename)
+
+            try:
+                shutil.copy2(file_path, new_filepath)
+                merged_files.append(new_filepath)
+                print(f"✅ Скопирован: {filename} -> {new_filename}")
+            except Exception as e:
+                print(f"❌ Ошибка копирования {filename}: {e}")
+
+        # Очищаем изолированную директорию
+        try:
+            shutil.rmtree(isolated_dir, ignore_errors=True)
+            print(f"🧹 Очищена изолированная директория: {isolated_dir}")
+        except Exception as e:
+            print(f"❌ Ошибка очистки {isolated_dir}: {e}")
+
+    print(f"🏁 Объединение завершено: {len(merged_files)} файлов")
+    return merged_files
 
 
 def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, headless=True, progress_callback=None):
@@ -1282,8 +1407,8 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
         parallel_sessions = get_parallel_sessions()
         
         if parallel_sessions > 1:
-            print(f"🚀 HOBBY ПЛАН: Параллельная обработка {parallel_sessions} сессий")
-            downloaded_files = process_batches_parallel(batches, download_dir, headless, progress_callback, parallel_sessions)
+            print(f"🚀 HOBBY ПЛАН: Изолированная параллельная обработка {parallel_sessions} сессий")
+            downloaded_files = process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, parallel_sessions)
         else:
             print(f"🔥 БАЗОВЫЙ ПЛАН: Последовательная обработка")
             downloaded_files = process_batches_sequential(batches, download_dir, headless, progress_callback)
@@ -1476,7 +1601,7 @@ def process_batch_with_new_browser(ean_codes_batch, download_dir, batch_number, 
         
         # Ждем обработки
         print(f"⏳ Ждем обработки запроса для группы {batch_number}...")
-        time.sleep(3)  # Уменьшено с 5 до 3 секунд
+        time.sleep(5)
         
         # Ждем появления результатов
         print(f"⏳ Ждем появления результатов для группы {batch_number}...")
@@ -1498,7 +1623,7 @@ def process_batch_with_new_browser(ean_codes_batch, download_dir, batch_number, 
         
         # Ждем загрузки файла
         print(f"⏳ Ждем загрузки файла для группы {batch_number}...")
-        max_wait_time = 45  # Уменьшено для ускорения
+        max_wait_time = 60
         wait_interval = 2
         waited_time = 0
         
@@ -1561,6 +1686,234 @@ def process_batch_with_new_browser(ean_codes_batch, download_dir, batch_number, 
         print(f"❌ Ошибка при обработке группы {batch_number} в новой сессии: {e}")
         return None
     
+    finally:
+        # 🔥 КРИТИЧЕСКИ ВАЖНО: Закрываем браузер после каждой группы
+        print(f"🔒 Закрываем браузер для группы {batch_number}")
+        driver.quit()
+
+
+def process_batch_with_new_browser_isolated(ean_codes_batch, download_dir, batch_number, headless=True):
+    """
+    🔥 Обрабатывает группу EAN кодов в НОВОЙ сессии браузера в изолированной директории
+
+    Args:
+        ean_codes_batch: список EAN кодов для обработки
+        download_dir: изолированная директория для скачивания файлов
+        batch_number: номер группы для идентификации файла
+        headless: запуск в headless режиме (True) или с GUI (False)
+
+    Returns:
+        str: путь к скачанному файлу или None если ошибка
+    """
+    if not ean_codes_batch:
+        print("Пустая группа EAN кодов")
+        return None
+
+    # Настройка драйвера Chrome для НОВОЙ сессии
+    options = webdriver.ChromeOptions()
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    if headless:
+        options.add_argument("--headless")
+
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-logging")
+    options.add_argument("--disable-web-security")
+    options.add_argument("--allow-running-insecure-content")
+
+    # 🔥 КРИТИЧЕСКИ ВАЖНО: Отключаем ВСЕ виды кеширования
+    options.add_argument("--disable-application-cache")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-features=TranslateUI")
+    options.add_argument("--disable-default-apps")
+    options.add_argument("--disable-sync")
+    options.add_argument("--disable-background-networking")
+    options.add_argument("--single-process")
+    options.add_argument("--no-first-run")
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-plugins-discovery")
+    options.add_argument("--disable-preconnect")
+    options.add_argument("--disable-hang-monitor")
+    options.add_argument("--disable-client-side-phishing-detection")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-prompt-on-repost")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-ipc-flooding-protection")
+
+    # Настройка для автоматической загрузки файлов
+    download_path = Path(download_dir)
+    prefs = {
+        "download.default_directory": str(download_path.absolute()),
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
+    }
+    options.add_experimental_option("prefs", prefs)
+
+    # 🆕 СОЗДАЕМ НОВЫЙ ДРАЙВЕР для каждой группы
+    service = get_chrome_service()
+    driver = webdriver.Chrome(service=service, options=options)
+
+    try:
+        print(f"Обработка группы {batch_number} с {len(ean_codes_batch)} EAN кодами...")
+
+        # Форматируем EAN коды в 13-цифровой формат
+        formatted_ean_codes = []
+        for code in ean_codes_batch:
+            formatted_code = format_ean_to_13_digits(code)
+            if formatted_code:
+                formatted_ean_codes.append(formatted_code)
+
+        if not formatted_ean_codes:
+            print("Нет валидных EAN кодов после форматирования")
+            return None
+
+        print(f"Отформатировано {len(formatted_ean_codes)} EAN кодов в 13-цифровой формат")
+
+        # Соединяем отформатированные EAN коды в одну строку через пробел
+        ean_codes_string = ' '.join(formatted_ean_codes)
+        print(f"DEBUG: Обрабатываем группу {batch_number} с EAN кодами: {ean_codes_string[:100]}...")
+
+        # Переход на страницу входа
+        driver.get("https://tradewatch.pl/login.jsf")
+
+        # Ждем загрузки страницы
+        wait = WebDriverWait(driver, 10)
+
+        # Ищем поле для email
+        email_field = wait.until(EC.presence_of_element_located((By.NAME, "j_username")))
+
+        # Вводим email
+        email_field.clear()
+        email_field.send_keys(TRADEWATCH_EMAIL)
+
+        # Ищем поле для пароля
+        password_field = driver.find_element(By.NAME, "j_password")
+
+        # Вводим пароль
+        password_field.clear()
+        password_field.send_keys(TRADEWATCH_PASSWORD)
+
+        # Ищем кнопку входа
+        login_button = driver.find_element(By.NAME, "btnLogin")
+
+        # Нажимаем кнопку входа
+        login_button.click()
+
+        # Ждем немного после входа
+        time.sleep(3)
+
+        # Проверяем успешность входа
+        current_url = driver.current_url
+
+        if "login.jsf" not in current_url:
+            print("Успешный вход в систему!")
+
+            # Переходим на страницу EAN Price Report
+            driver.get("https://tradewatch.pl/report/ean-price-report.jsf")
+            time.sleep(3)
+
+            try:
+                # Ищем поле для ввода EAN кодов
+                ean_field = wait.until(EC.presence_of_element_located((By.ID, "eansPhrase")))
+
+                # Тщательно очищаем поле
+                clear_ean_field_thoroughly(driver, ean_field, batch_number)
+
+                # Безопасно вставляем EAN коды
+                if not insert_ean_codes_safely(driver, ean_field, ean_codes_string, batch_number):
+                    print(f"Ошибка: не удалось вставить EAN коды для группы {batch_number}")
+                    return None
+
+                # Ждем немного
+                time.sleep(1)
+
+                # Ищем кнопку "Generuj"
+                generate_button = driver.find_element(By.ID, "j_idt703")
+
+                # Нажимаем кнопку
+                generate_button.click()
+
+                # Ждем обработки
+                print("Ждем обработки запроса...")
+                time.sleep(5)
+
+                # Ждем появления результатов
+                print("Ждем появления результатов...")
+                time.sleep(3)
+
+                # Ищем кнопку "Eksport do XLS"
+                try:
+                    export_button = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Eksport do XLS")))
+
+                    # Нажимаем кнопку экспорта
+                    export_button.click()
+
+                    # Ждем начала загрузки файла
+                    print("Ждем загрузки файла...")
+
+                    # Ждем появления файла с проверкой каждые 2 секунды
+                    max_wait_time = 60
+                    wait_interval = 2
+                    waited_time = 0
+
+                    downloaded_file_found = False
+
+                    while waited_time < max_wait_time:
+                        time.sleep(wait_interval)
+                        waited_time += wait_interval
+
+                        # Ищем скачанный файл (только оригинальное имя)
+                        downloaded_files = glob.glob(os.path.join(download_dir, "TradeWatch - raport konkurencji.xlsx"))
+                        if downloaded_files:
+                            # Проверяем, что файл полностью скачался
+                            latest_file = downloaded_files[0]
+
+                            # Ждем немного и проверяем, что размер файла не изменился
+                            initial_size = os.path.getsize(latest_file)
+                            time.sleep(3)
+
+                            try:
+                                final_size = os.path.getsize(latest_file)
+                                if initial_size == final_size and final_size > 0:
+                                    print(f"Файл для группы {batch_number} загружен: {latest_file} (размер: {final_size} байт)")
+                                    downloaded_file_found = True
+                                    break
+                                else:
+                                    print(f"Файл еще скачивается... (размер: {final_size} байт)")
+                            except:
+                                print(f"Файл заблокирован, продолжаем ждать...")
+                                continue
+                        else:
+                            print(f"Ожидание файла... ({waited_time}/{max_wait_time} сек)")
+
+                    if downloaded_file_found:
+                        # Возвращаем путь к файлу в изолированной директории
+                        return latest_file
+                    else:
+                        print(f"Файл для группы {batch_number} не найден после {max_wait_time} секунд ожидания")
+                        return None
+
+                except Exception as export_error:
+                    print(f"Ошибка при экспорте группы {batch_number}: {export_error}")
+                    return None
+
+            except Exception as e:
+                print(f"Ошибка при работе с EAN кодами группы {batch_number}: {e}")
+                return None
+        else:
+            print("Ошибка при входе в систему")
+            return None
+
+    except Exception as e:
+        print(f"Произошла ошибка при обработке группы {batch_number}: {e}")
+        return None
+
     finally:
         # 🔥 КРИТИЧЕСКИ ВАЖНО: Закрываем браузер после каждой группы
         print(f"🔒 Закрываем браузер для группы {batch_number}")
@@ -1935,7 +2288,7 @@ def process_batch_in_separate_browser(ean_codes_batch, download_dir, batch_numbe
         search_button.click()
         
         print(f"Ждем обработки запроса для группы {batch_number}...")
-        time.sleep(3)  # Уменьшено с 5 до 3 секунд
+        time.sleep(5)
         
         # Ждем появления результатов
         wait.until(EC.presence_of_element_located((By.ID, "report_form:results")))
@@ -2022,7 +2375,7 @@ def wait_for_download_separate_browser(download_dir, batch_number):
     """
     Ждет загрузки файла для отдельного браузера
     """
-    max_wait_time = 45  # Уменьшено для ускорения
+    max_wait_time = 60
     wait_interval = 2
     waited_time = 0
     
