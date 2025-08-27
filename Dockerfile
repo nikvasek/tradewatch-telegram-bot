@@ -1,4 +1,4 @@
-# Railway Hobby Plan - Selenium Chrome Dockerfile (с ускорением 4x) - FORCE REBUILD v5.0 - ЭКСТРЕННЫЙ ПЕРЕЗАПУСК
+# Railway Hobby Plan - ПРИНУДИТЕЛЬНЫЙ HOBBY РЕЖИМ v6.0 - ВСЕГДА УСКОРЕНИЕ 4X
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
