@@ -16,7 +16,7 @@ import pandas as pd
 try:
     from selenium import webdriver
     SELENIUM_AVAILABLE = True
-    from tradewatch_login import process_supplier_file_with_tradewatch, is_hobby_plan, get_parallel_sessions, get_batch_size
+    from tradewatch_login import process_supplier_file_with_tradewatch, get_parallel_sessions, get_batch_size
     print("✅ Selenium доступен - TradeWatch интеграция активна")
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -197,9 +197,7 @@ class TelegramBot:
         # ДОБАВИТЬ: Логирование конфигурации при запуске бота
         print("🚀 ЗАПУСК TELEGRAM БОТА")
         print("=" * 50)
-        print(f"🔍 Определяем план Railway...")
-        is_hobby = is_hobby_plan()
-        print(f"📊 Результат определения плана: {'HOBBY' if is_hobby else 'БЕСПЛАТНЫЙ'}")
+        print("� Railway Hobby план - максимальная производительность")
 
         parallel_sessions = get_parallel_sessions()
         batch_size = get_batch_size()
@@ -542,13 +540,12 @@ class TelegramBot:
             import threading
             
             def run_processing():
-                # ДОБАВИТЬ: Логирование определения плана
-                print(f"🔍 Определяем план Railway...")
-                is_hobby = is_hobby_plan()
-                print(f"📊 Результат определения плана: {'HOBBY' if is_hobby else 'БЕСПЛАТНЫЙ'}")
-
+                # ДОБАВИТЬ: Логирование конфигурации обработки
+                print("� Railway Hobby план - запускаем параллельную обработку")
                 parallel_sessions = get_parallel_sessions()
-                print(f"🔄 Количество параллельных сессий: {parallel_sessions}")
+                batch_size = get_batch_size()
+                print(f"🔄 Параллельные сессии: {parallel_sessions}")
+                print(f"📦 Размер батча: {batch_size} EAN кодов")
 
                 return process_supplier_with_tradewatch_auto(
                     supplier_file_path, 

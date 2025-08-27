@@ -22,49 +22,6 @@ from selenium.webdriver.common.window import WindowTypes
 TRADEWATCH_EMAIL = os.getenv("TRADEWATCH_EMAIL", "TRADEWATCH_EMAIL")
 TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
-def is_hobby_plan():
-    """Определяет, используется ли Railway Hobby план"""
-    # ДОБАВИТЬ: Логирование для диагностики
-    print(f"🔍 Проверяем план Railway...")
-    print(f"  RAILWAY_PLAN: {os.environ.get('RAILWAY_PLAN', 'НЕ УСТАНОВЛЕНА')}")
-    print(f"  MEMORY_LIMIT: {os.environ.get('MEMORY_LIMIT', 'НЕ УСТАНОВЛЕНА')}")
-    print(f"  CPU_LIMIT: {os.environ.get('CPU_LIMIT', 'НЕ УСТАНОВЛЕНА')}")
-    print(f"  RAILWAY_ENVIRONMENT_NAME: {os.environ.get('RAILWAY_ENVIRONMENT_NAME', 'НЕ УСТАНОВЛЕНА')}")
-    print(f"  DEPLOYMENT_TYPE: {os.environ.get('DEPLOYMENT_TYPE', 'НЕ УСТАНОВЛЕНА')}")
-
-    # Проверяем переменные окружения Railway для определения плана
-    railway_plan = os.environ.get('RAILWAY_PLAN', '').lower()
-    if railway_plan == 'hobby':
-        print("✅ Определен Hobby план по RAILWAY_PLAN")
-        return True
-
-    # Проверяем по объему памяти (Hobby имеет больше памяти)
-    memory_limit = os.environ.get('MEMORY_LIMIT', '512')
-    if memory_limit not in ['512', '512MB', '512mb']:
-        print(f"✅ Определен Hobby план по памяти: {memory_limit}")
-        return True
-
-    # Проверяем по другим индикаторам
-    deployment_type = os.environ.get('DEPLOYMENT_TYPE', '').upper()
-    if 'HOBBY' in deployment_type:
-        print(f"✅ Определен Hobby план по DEPLOYMENT_TYPE: {deployment_type}")
-        return True
-
-    # Проверяем по CPU лимитам (Hobby имеет больше CPU)
-    cpu_limit = os.environ.get('CPU_LIMIT', '0.5')
-    try:
-        if float(cpu_limit) > 0.5:
-            print(f"✅ Определен Hobby план по CPU: {cpu_limit}")
-            return True
-    except:
-        pass
-
-    # ДОБАВИТЬ: Временная заглушка для тестирования параллельной обработки
-    print("⚠️  План не определен, используем последовательную обработку")
-    print("💡 Если у вас Hobby план, установите переменную окружения RAILWAY_PLAN=hobby")
-    print("🔧 ВРЕМЕННО: Принудительно включаем Hobby режим для тестирования!")
-    return True  # ВРЕМЕННО для тестирования
-
 def get_railway_chrome_options(batch_number=None):
     """
     Получить настройки Chrome для Railway deployment
@@ -100,66 +57,32 @@ def get_railway_chrome_options(batch_number=None):
     
     # Проверяем переменные окружения Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        is_hobby = is_hobby_plan()  # Используем нашу функцию определения плана
-        
-        if is_hobby:
-            print("🚀 Railway Hobby план - используем настройки для максимальной скорости")
-            # Настройки для скорости на Hobby плане
-            options.add_argument("--max_old_space_size=1024MB")  # Больше памяти для Hobby
-            options.add_argument("--enable-fast-unload")
-            options.add_argument("--aggressive-cache-discard")
-            options.add_argument("--enable-parallel-downloading")  # Параллельная загрузка
-            options.add_argument("--enable-quic")  # QUIC протокол для скорости
-            options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
-            options.add_argument("--disable-background-media-download")  # Отключаем ненужное
-            options.add_argument("--disable-component-extensions-with-background-pages")
-        else:
-            print("🚂 Railway бесплатный план - используем настройки для стабильности")
-            options.add_argument("--memory-pressure-off")
-            options.add_argument("--max_old_space_size=512MB")
-            # Дополнительные настройки для экономии памяти на бесплатном плане
-            options.add_argument("--disable-background-timer-throttling")
-            options.add_argument("--disable-backing-store-limit")
-            options.add_argument("--disable-hang-monitor")
-            options.add_argument("--disable-client-side-phishing-detection")
-            options.add_argument("--disable-popup-blocking")
-            options.add_argument("--disable-prompt-on-repost")
-            options.add_argument("--disable-renderer-backgrounding")
-            options.add_argument("--disable-ipc-flooding-protection")
+        print("🚀 Railway Hobby план - используем настройки для максимальной скорости")
+        # Оптимизированные настройки для Hobby плана
+        options.add_argument("--max_old_space_size=1024MB")  # Больше памяти для Hobby
+        options.add_argument("--enable-fast-unload")
+        options.add_argument("--aggressive-cache-discard")
+        options.add_argument("--enable-parallel-downloading")  # Параллельная загрузка
+        options.add_argument("--enable-quic")  # QUIC протокол для скорости
+        options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
+        options.add_argument("--disable-background-media-download")  # Отключаем ненужное
+        options.add_argument("--disable-component-extensions-with-background-pages")
     
     return options
 
 def get_batch_size():
     """
-    Получить оптимальный размер батча в зависимости от окружения и плана
+    Оптимальный размер батча для Railway Hobby плана
     """
-    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        # Используем нашу новую функцию is_hobby_plan()
-        if is_hobby_plan():
-            print("🚀 Railway Hobby план - используем батчи по 400 кодов для максимальной скорости")
-            return 400  # Увеличенные батчи для Hobby плана
-        else:
-            print("🚂 Railway бесплатный план - используем батчи по 400 кодов")
-            return 400   # Увеличенные батчи для бесплатного плана
-    else:
-        print("💻 Локальное окружение - используем батчи по 300 кодов")
-        return 300
+    print("🚀 Railway Hobby план - используем батчи по 400 кодов для максимальной скорости")
+    return 400  # Оптимальный размер для Hobby плана
 
 def get_parallel_sessions():
     """
-    Получить количество параллельных сессий для обработки
+    Количество параллельных сессий для Railway Hobby плана
     """
-    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        # Используем нашу функцию is_hobby_plan() вместо прямой проверки переменных
-        if is_hobby_plan():
-            print("🚀 Hobby план - используем 6 параллельные сессии для максимальной скорости")
-            return 6  # 6 параллельные сессии для Hobby плана (максимальное ускорение)
-        else:
-            print("🚂 Бесплатный план - используем 1 сессию (последовательная обработка)")
-            return 1  # Бесплатный план - последовательная обработка для стабильности
-    else:
-        print("💻 Локальное окружение - используем 2 сессии")
-        return 2
+    print("🚀 Hobby план - используем 6 параллельные сессии для максимальной скорости")
+    return 6  # Оптимальное количество для Hobby плана
 
 def cleanup_chrome_temp_dirs():
     """
@@ -1146,7 +1069,7 @@ def process_batch_in_session(driver, ean_codes_batch, download_dir, batch_number
 
 
 def process_batches_sequential(batches, download_dir, headless, progress_callback):
-    """Последовательная обработка батчей (для бесплатного плана)"""
+    """Последовательная обработка батчей"""
     downloaded_files = []
     processed_count = 0
     
@@ -1211,7 +1134,7 @@ def process_batch_worker_isolated(args):
 
 
 def process_batches_parallel(batches, download_dir, headless, progress_callback, max_workers):
-    """Параллельная обработка батчей (для Hobby плана)"""
+    """Параллельная обработка батчей"""
     downloaded_files = []
     processed_count = 0
     isolated_dirs = []  # Список изолированных директорий для объединения
@@ -1361,9 +1284,7 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
     Обрабатывает файл поставщика: извлекает EAN коды, 
     разбивает на группы и получает данные из TradeWatch
     
-    АВТОМАТИЧЕСКИ ВЫБИРАЕТ СТРАТЕГИЮ:
-    - Hobby план: параллельная обработка с большими батчами
-    - Бесплатный план: последовательная обработка с малыми батчами
+    Railway Hobby план: параллельная обработка с большими батчами
     
     Args:
         supplier_file_path: путь к файлу поставщика
@@ -1426,15 +1347,16 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
                     print(f"Не удалось удалить файл {old_file}: {e}")
                     pass
         
-        # � ОПТИМИЗАЦИЯ ДЛЯ HOBBY ПЛАНА: Выбираем стратегию обработки
+        # 🚀 HOBBY ПЛАН: Изолированная параллельная обработка
         parallel_sessions = get_parallel_sessions()
         
-        if parallel_sessions > 1:
-            print(f"🚀 HOBBY ПЛАН: Изолированная параллельная обработка {parallel_sessions} сессий")
-            downloaded_files = process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, parallel_sessions)
-        else:
-            print(f"🔥 БАЗОВЫЙ ПЛАН: Последовательная обработка")
-            downloaded_files = process_batches_sequential(batches, download_dir, headless, progress_callback)
+        print(f"🚀 Railway Hobby план - запускаем параллельную обработку")
+        print(f"� Параллельные сессии: {parallel_sessions}")
+        print(f"📦 Размер батча: {batch_size} EAN кодов")
+        print(f"📁 Рабочая директория: {download_dir}")
+        print(f"� Файл поставщика: {supplier_file_path}")
+        
+        downloaded_files = process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, parallel_sessions)
         
         print(f"\n🏁 Обработка завершена. Загружено {len(downloaded_files)} файлов из {len(batches)} групп")
         
