@@ -16,7 +16,7 @@ import pandas as pd
 try:
     from selenium import webdriver
     SELENIUM_AVAILABLE = True
-    from tradewatch_login import process_supplier_file_with_tradewatch, is_hobby_plan, get_parallel_sessions
+    from tradewatch_login import process_supplier_file_with_tradewatch, is_hobby_plan, get_parallel_sessions, get_batch_size
     print("✅ Selenium доступен - TradeWatch интеграция активна")
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -193,6 +193,21 @@ class TelegramBot:
             connect_timeout=60  # 1 минута на подключение
         )
         self.application = Application.builder().token(token).request(request).build()
+
+        # ДОБАВИТЬ: Логирование конфигурации при запуске бота
+        print("🚀 ЗАПУСК TELEGRAM БОТА")
+        print("=" * 50)
+        print(f"🔍 Определяем план Railway...")
+        is_hobby = is_hobby_plan()
+        print(f"📊 Результат определения плана: {'HOBBY' if is_hobby else 'БЕСПЛАТНЫЙ'}")
+
+        parallel_sessions = get_parallel_sessions()
+        batch_size = get_batch_size()
+        print(f"🔄 Количество параллельных сессий: {parallel_sessions}")
+        print(f"📦 Размер батча: {batch_size} EAN кодов")
+        print(f"⚡ Расчетная производительность: {batch_size * parallel_sessions} EAN одновременно")
+        print("=" * 50)
+
         self.setup_handlers()
 
     async def setup_bot_commands(self):
