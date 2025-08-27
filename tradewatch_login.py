@@ -24,13 +24,30 @@ TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
 def cleanup_chrome_temp_dirs():
     """
-    Очистка старых директорий Chrome user data для предотвращения конфликтов
+    Агрессивная очистка всех Chrome процессов и директорий
     """
     try:
         import glob
         import shutil
+        import subprocess
 
-        # Находим все директории chrome_user_data
+        print("🧹 Агрессивная очистка Chrome процессов и директорий...")
+
+        # 1. Убиваем все процессы Chrome
+        try:
+            # Находим и убиваем все процессы chrome/chromium
+            result = subprocess.run(['pkill', '-f', 'chrome'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("✅ Найденные Chrome процессы остановлены")
+            else:
+                print("ℹ️ Активные Chrome процессы не найдены")
+        except Exception as e:
+            print(f"⚠️ Не удалось остановить Chrome процессы: {e}")
+
+        # 2. Ждем завершения процессов
+        time.sleep(2)
+
+        # 3. Очищаем все директории chrome_user_data
         pattern = "/tmp/chrome_user_data_*"
         old_dirs = glob.glob(pattern)
 
@@ -44,10 +61,37 @@ def cleanup_chrome_temp_dirs():
                 print(f"⚠️ Не удалось удалить {old_dir}: {e}")
 
         if cleaned_count > 0:
-            print(f"🧹 Очищено {cleaned_count} старых директорий Chrome")
+            print(f"🧹 Очищено {cleaned_count} директорий Chrome")
+
+        # 4. Очищаем другие возможные временные директории Chrome
+        chrome_temp_patterns = [
+            "/tmp/.org.chromium.*",
+            "/tmp/.com.google.Chrome.*",
+            "/tmp/Chromium-*",
+            "/tmp/Chrome-*"
+        ]
+
+        for pattern in chrome_temp_patterns:
+            temp_dirs = glob.glob(pattern)
+            for temp_dir in temp_dirs:
+                try:
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir)
+                        print(f"🧹 Очищена временная директория: {temp_dir}")
+                except Exception as e:
+                    print(f"⚠️ Не удалось удалить временную директорию {temp_dir}: {e}")
+
+        # 5. Очищаем /tmp от других Chrome файлов
+        try:
+            result = subprocess.run(['find', '/tmp', '-name', '*chrom*', '-type', 'f', '-delete'],
+                                  capture_output=True, text=True)
+            if result.returncode == 0:
+                print("🧹 Очищены временные файлы Chrome")
+        except Exception as e:
+            print(f"⚠️ Не удалось очистить временные файлы: {e}")
 
     except Exception as e:
-        print(f"⚠️ Ошибка при очистке директорий Chrome: {e}")
+        print(f"⚠️ Ошибка при агрессивной очистке: {e}")
 
 def get_railway_chrome_options(batch_number=None):
     """
@@ -62,10 +106,8 @@ def get_railway_chrome_options(batch_number=None):
         import threading
         unique_id = f"{batch_number}_{os.getpid()}_{threading.current_thread().ident}_{int(time.time() * 1000000)}"
         user_data_dir = f"/tmp/chrome_user_data_{unique_id}"
-        options.add_argument(f"--user-data-dir={user_data_dir}")
-        print(f"🔧 Используем уникальную директорию: {user_data_dir}")
 
-        # Очищаем директорию если она существует
+        # Создаем директорию заранее и очищаем если существует
         if os.path.exists(user_data_dir):
             try:
                 import shutil
@@ -73,6 +115,16 @@ def get_railway_chrome_options(batch_number=None):
                 print(f"🧹 Очищена существующая директория: {user_data_dir}")
             except Exception as e:
                 print(f"⚠️ Не удалось очистить директорию {user_data_dir}: {e}")
+
+        try:
+            os.makedirs(user_data_dir, exist_ok=True)
+        except Exception as e:
+            # Если не можем создать, используем системную tmp
+            user_data_dir = f"/tmp/chrome_{unique_id}"
+            print(f"🔄 Переключаемся на альтернативную директорию: {user_data_dir}")
+
+        options.add_argument(f"--user-data-dir={user_data_dir}")
+        print(f"🔧 Используем уникальную директорию: {user_data_dir}")
 
     # Базовые настройки для headless режима
     options.add_argument("--headless")
@@ -85,7 +137,32 @@ def get_railway_chrome_options(batch_number=None):
     options.add_argument("--disable-web-security")
     options.add_argument("--allow-running-insecure-content")
 
-    # Railway специфичные настройки
+    # Агрессивные настройки для предотвращения конфликтов сессий
+    options.add_argument("--disable-application-cache")
+    options.add_argument("--disable-cache")
+    options.add_argument("--disable-offline-load-stale-cache")
+    options.add_argument("--disk-cache-dir=/dev/null")
+    options.add_argument("--disable-plugins")
+    options.add_argument("--disable-plugins-discovery")
+    options.add_argument("--disable-preconnect")
+    options.add_argument("--disable-hang-monitor")
+    options.add_argument("--disable-client-side-phishing-detection")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-prompt-on-repost")
+    options.add_argument("--disable-ipc-flooding-protection")
+    options.add_argument("--disable-renderer-accessibility")
+    options.add_argument("--no-first-run")
+    options.add_argument("--disable-default-apps")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-session-crashed-bubble")
+    options.add_argument("--disable-component-extensions-with-background-pages")
+    options.add_argument("--disable-features=VizDisplayCompositor")
+    options.add_argument("--disable-accelerated-video-decode")
+    options.add_argument("--disable-accelerated-video-encode")
+    options.add_argument("--use-gl=swiftshader")
+    options.add_argument("--disable-background-media-download")
+    options.add_argument("--disable-software-rasterizer")
     options.add_argument("--disable-background-timer-throttling")
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-renderer-backgrounding")
@@ -1747,29 +1824,52 @@ def process_batch_with_new_browser_isolated(ean_codes_batch, download_dir, batch
 
     # 🆕 СОЗДАЕМ НОВЫЙ ДРАЙВЕР для каждой группы с retry логикой
     driver = None
-    max_retries = 3
+    max_retries = 5  # Увеличиваем количество попыток
 
     for attempt in range(max_retries):
         try:
+            print(f"🔄 Попытка создания Chrome драйвера {attempt + 1}/{max_retries}")
+
+            # Агрессивная очистка перед каждой попыткой
+            cleanup_chrome_temp_dirs()
+
+            # На последней попытке используем инкогнито режим
+            if attempt >= 3:
+                print("🔒 Переключаемся в инкогнито режим для последней попытки")
+                options.add_argument("--incognito")
+                options.add_argument("--disable-web-security")
+                options.add_argument("--disable-features=VizDisplayCompositor")
+
             service = get_chrome_service()
             driver = webdriver.Chrome(service=service, options=options)
             print(f"✅ Chrome драйвер создан успешно (попытка {attempt + 1})")
             break
+
         except Exception as e:
             print(f"❌ Ошибка создания Chrome драйвера (попытка {attempt + 1}/{max_retries}): {e}")
 
             if attempt < max_retries - 1:
                 # Очищаем директории и ждем перед следующей попыткой
                 cleanup_chrome_temp_dirs()
-                wait_time = 2 * (attempt + 1)  # 2s, 4s, 6s
+
+                # Прогрессивное время ожидания с увеличением
+                wait_time = 3 * (attempt + 1)  # 3s, 6s, 9s, 12s
                 print(f"⏳ Ждем {wait_time} секунд перед следующей попыткой...")
                 time.sleep(wait_time)
+
+                # Дополнительная очистка процессов
+                try:
+                    import subprocess
+                    subprocess.run(['pkill', '-9', '-f', 'chrom'], capture_output=True)
+                    time.sleep(1)
+                except:
+                    pass
             else:
                 print("❌ Превышено максимальное количество попыток создания драйвера")
                 return None
 
     if not driver:
-        print("❌ Не удалось создать Chrome драйвер")
+        print("❌ Не удалось создать Chrome драйвер после всех попыток")
         return None
 
     try:
