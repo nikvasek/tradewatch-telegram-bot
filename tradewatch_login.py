@@ -24,31 +24,46 @@ TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
 def is_hobby_plan():
     """Определяет, используется ли Railway Hobby план"""
+    # ДОБАВИТЬ: Логирование для диагностики
+    print(f"🔍 Проверяем план Railway...")
+    print(f"  RAILWAY_PLAN: {os.environ.get('RAILWAY_PLAN', 'НЕ УСТАНОВЛЕНА')}")
+    print(f"  MEMORY_LIMIT: {os.environ.get('MEMORY_LIMIT', 'НЕ УСТАНОВЛЕНА')}")
+    print(f"  CPU_LIMIT: {os.environ.get('CPU_LIMIT', 'НЕ УСТАНОВЛЕНА')}")
+    print(f"  RAILWAY_ENVIRONMENT_NAME: {os.environ.get('RAILWAY_ENVIRONMENT_NAME', 'НЕ УСТАНОВЛЕНА')}")
+    print(f"  DEPLOYMENT_TYPE: {os.environ.get('DEPLOYMENT_TYPE', 'НЕ УСТАНОВЛЕНА')}")
+
     # Проверяем переменные окружения Railway для определения плана
     railway_plan = os.environ.get('RAILWAY_PLAN', '').lower()
     if railway_plan == 'hobby':
+        print("✅ Определен Hobby план по RAILWAY_PLAN")
         return True
 
     # Проверяем по объему памяти (Hobby имеет больше памяти)
     memory_limit = os.environ.get('MEMORY_LIMIT', '512')
     if memory_limit not in ['512', '512MB', '512mb']:
+        print(f"✅ Определен Hobby план по памяти: {memory_limit}")
         return True
 
     # Проверяем по другим индикаторам
     deployment_type = os.environ.get('DEPLOYMENT_TYPE', '').upper()
     if 'HOBBY' in deployment_type:
+        print(f"✅ Определен Hobby план по DEPLOYMENT_TYPE: {deployment_type}")
         return True
 
     # Проверяем по CPU лимитам (Hobby имеет больше CPU)
     cpu_limit = os.environ.get('CPU_LIMIT', '0.5')
     try:
         if float(cpu_limit) > 0.5:
+            print(f"✅ Определен Hobby план по CPU: {cpu_limit}")
             return True
     except:
         pass
 
-    # Если ничего не найдено, считаем что это бесплатный план
-    return False
+    # ДОБАВИТЬ: Временная заглушка для тестирования параллельной обработки
+    print("⚠️  План не определен, используем последовательную обработку")
+    print("💡 Если у вас Hobby план, установите переменную окружения RAILWAY_PLAN=hobby")
+    print("🔧 ВРЕМЕННО: Принудительно включаем Hobby режим для тестирования!")
+    return True  # ВРЕМЕННО для тестирования
 
 def get_railway_chrome_options(batch_number=None):
     """
@@ -1199,6 +1214,7 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
     """Параллельная обработка батчей (для Hobby плана)"""
     downloaded_files = []
     processed_count = 0
+    isolated_dirs = []  # Список изолированных директорий для объединения
     
     # Подготавливаем аргументы для воркеров
     worker_args = []
@@ -1210,18 +1226,20 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
     # Используем ThreadPoolExecutor для параллельной обработки
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Отправляем все задачи
-        future_to_batch = {executor.submit(process_batch_worker, args): i for i, args in enumerate(worker_args, 1)}
+        future_to_batch = {executor.submit(process_batch_worker_isolated, args): i for i, args in enumerate(worker_args, 1)}
         
         # Собираем результаты по мере выполнения
         for future in concurrent.futures.as_completed(future_to_batch):
             batch_num = future_to_batch[future]
             try:
-                result, batch_size = future.result()
+                result, batch_size, isolated_dir = future.result()
                 if result:
                     downloaded_files.append(result)
                     processed_count += batch_size
+                    if isolated_dir:
+                        isolated_dirs.append(isolated_dir)
                     print(f"✅ ПАРАЛЛЕЛЬНО: Батч {batch_num} завершен, обработано {batch_size} кодов")
-                    
+
                     # Обновляем прогресс через callback
                     if progress_callback:
                         try:
@@ -1233,7 +1251,12 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
                     
             except Exception as exc:
                 print(f"❌ ПАРАЛЛЕЛЬНО: Батч {batch_num} вызвал исключение: {exc}")
-    
+
+    # Объединяем результаты из изолированных директорий
+    if isolated_dirs:
+        merged_files = merge_isolated_results(download_dir, isolated_dirs, progress_callback)
+        downloaded_files.extend(merged_files)
+
     print(f"🏁 ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ЗАВЕРШЕНА: {len(downloaded_files)} файлов из {len(batches)} батчей")
     return downloaded_files
 
