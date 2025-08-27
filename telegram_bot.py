@@ -763,34 +763,65 @@ def main():
     print("🔍 Проверяем переменные окружения...")
 
     # Показываем статус переменных (без значений по соображениям безопасности)
-    bot_token_status = "✅ УСТАНОВЛЕН" if BOT_TOKEN and BOT_TOKEN != "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw" else "❌ НЕ УСТАНОВЛЕН"
+    bot_token_raw = os.getenv("BOT_TOKEN", "")
+    bot_token_status = "✅ УСТАНОВЛЕН" if bot_token_raw and bot_token_raw != "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw" else "❌ НЕ УСТАНОВЛЕН"
+
+    # Отладочная информация
+    print(f"BOT_TOKEN: {bot_token_status}")
+    if bot_token_raw:
+        print(f"BOT_TOKEN длина: {len(bot_token_raw)} символов")
+        print(f"BOT_TOKEN начинается с: {bot_token_raw[:20]}..." if len(bot_token_raw) > 20 else f"BOT_TOKEN: {bot_token_raw}")
+    else:
+        print("BOT_TOKEN: (пустое значение)")
+
     tradewatch_email_status = "✅ УСТАНОВЛЕН" if os.getenv("TRADEWATCH_EMAIL") else "❌ НЕ УСТАНОВЛЕН"
     tradewatch_password_status = "✅ УСТАНОВЛЕН" if os.getenv("TRADEWATCH_PASSWORD") else "❌ НЕ УСТАНОВЛЕН"
 
-    print(f"BOT_TOKEN: {bot_token_status}")
     print(f"TRADEWATCH_EMAIL: {tradewatch_email_status}")
     print(f"TRADEWATCH_PASSWORD: {tradewatch_password_status}")
     print("")
 
-    # Проверяем токен бота
-    if not BOT_TOKEN or BOT_TOKEN == "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw":
-        logger.error("❌ BOT_TOKEN не установлен! Установите переменную окружения BOT_TOKEN")
-        print("❌ ОШИБКА: BOT_TOKEN не установлен!")
+    # Показываем все переменные окружения (для отладки)
+    print("🔍 Все переменные окружения содержащие 'BOT' или 'TRADE':")
+    for key, value in os.environ.items():
+        if 'BOT' in key.upper() or 'TRADE' in key.upper():
+            masked_value = value[:10] + "..." + value[-5:] if len(value) > 15 else value
+            print(f"  {key}: {masked_value}")
+    print("")
+
+    # Проверяем токен бота с более детальной диагностикой
+    bot_token_env = os.getenv("BOT_TOKEN", "")
+    expected_token = "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw"
+
+    print(f"🔍 Детальная проверка BOT_TOKEN:")
+    print(f"  Значение установлено: {'Да' if bot_token_env else 'Нет'}")
+    print(f"  Длина значения: {len(bot_token_env)} символов")
+    print(f"  Ожидаемая длина: {len(expected_token)} символов")
+    print(f"  Совпадает с ожидаемым: {'Да' if bot_token_env == expected_token else 'Нет'}")
+    print("")
+
+    if not bot_token_env or bot_token_env == expected_token:
+        logger.error("❌ BOT_TOKEN не установлен или установлен по умолчанию!")
+        print("❌ ПРОБЛЕМА С BOT_TOKEN!")
+        print("")
+        print("🔍 ВОЗМОЖНЫЕ ПРИЧИНЫ:")
+        print("1. Переменная BOT_TOKEN не добавлена в Railway")
+        print("2. Переменная добавлена но deployment не перезапущен")
+        print("3. Ошибка в значении переменной")
+        print("4. Переменная добавлена на уровне проекта, а не сервиса")
         print("")
         print("🔧 РЕШЕНИЕ:")
         print("1. Перейдите в Railway Dashboard: https://railway.app/dashboard")
         print("2. Выберите проект 'tradewatch-telegram-bot'")
         print("3. Перейдите во вкладку 'Variables'")
-        print("4. Нажмите 'Add Variable'")
-        print("5. Добавьте переменную:")
-        print("   Name: BOT_TOKEN")
-        print("   Value: 8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw")
+        print("4. Убедитесь что переменная BOT_TOKEN существует:")
+        print(f"   Name: BOT_TOKEN")
+        print(f"   Value: {expected_token}")
+        print("5. Если переменная существует - нажмите 'Redeploy'")
+        print("6. Если переменной нет - добавьте её")
         print("")
-        print("6. Также добавьте переменные для TradeWatch:")
-        print("   TRADEWATCH_EMAIL: ваш_email@example.com")
-        print("   TRADEWATCH_PASSWORD: ваш_пароль")
-        print("")
-        print("7. Перезапустите deployment")
+        print("💡 СОВЕТ: Убедитесь что переменная добавлена на уровне СЕРВИСА, а не ПРОЕКТА")
+        print("   (Variables вкладка должна быть в вашем сервисе, а не в корне проекта)")
         print("")
         return
 
