@@ -193,11 +193,25 @@ def merge_excel_files_by_ean_with_calculations(directory_path='.'):
             # Читаем лист "Produkty wg EAN"
             df = pd.read_excel(file_path, sheet_name=config.TRADEWATCH_SHEET_NAME)
             
-            # Проверяем наличие колонки EAN
-            if 'EAN' not in df.columns:
-                print(f"  Колонка 'EAN' не найдена в файле {file_path}")
-                print(f"  Доступные колонки: {list(df.columns)}")
+            # Ищем колонку EAN среди возможных вариантов названий
+            ean_column = None
+            possible_ean_columns = ['EAN', 'ean', 'EAN13', 'EAN-13', 'GTIN', 'gtin', 'Код EAN', 'EAN код']
+            
+            for col in possible_ean_columns:
+                if col in df.columns:
+                    ean_column = col
+                    break
+            
+            if ean_column is None:
+                print(f"  ⚠️ Колонка EAN не найдена в файле {file_path}")
+                print(f"  📋 Доступные колонки: {list(df.columns)}")
                 continue
+            
+            print(f"  ✅ Найдена колонка EAN: '{ean_column}'")
+            
+            # Переименовываем колонку в стандартное имя 'EAN'
+            if ean_column != 'EAN':
+                df = df.rename(columns={ean_column: 'EAN'})
             
             # Добавляем информацию об источнике
             df['source_file'] = os.path.basename(file_path)
