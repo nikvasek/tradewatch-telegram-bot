@@ -1,4 +1,4 @@
-# Railway Hobby Plan - СУПЕР УСКОРЕНИЕ 400 EAN v7.0 - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
+# Railway Hobby Plan - Selenium Chrome Dockerfile (с ускорением 4x) - FORCE REBUILD v3.0
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
@@ -19,11 +19,6 @@ RUN find /opt -name "chromedriver*" -type f -executable 2>/dev/null | head -1 | 
     && which chromedriver || echo "ChromeDriver not found in PATH"
 
 WORKDIR /app
-
-# Устанавливаем переменные окружения для принудительной активации Hobby режима
-ENV RAILWAY_PLAN=hobby
-ENV RAILWAY_MEMORY_LIMIT=8192
-ENV DEPLOYMENT_TYPE=HOBBY
 
 # Копирование и установка зависимостей
 COPY requirements.txt .
