@@ -762,9 +762,12 @@ def main():
     logger.info("🔍 Проверяем переменные окружения...")
     print("🔍 Проверяем переменные окружения...")
 
+    # Определяем ожидаемый токен
+    expected_token = "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw"
+
     # Показываем статус переменных (без значений по соображениям безопасности)
     bot_token_raw = os.getenv("BOT_TOKEN", "")
-    bot_token_status = "✅ УСТАНОВЛЕН" if bot_token_raw and bot_token_raw != expected_token else "❌ НЕ УСТАНОВЛЕН"
+    bot_token_status = "✅ УСТАНОВЛЕН" if bot_token_raw and bot_token_raw == expected_token else "❌ НЕ УСТАНОВЛЕН"
 
     # Отладочная информация
     print(f"BOT_TOKEN: {bot_token_status}")
@@ -795,7 +798,6 @@ def main():
 
     # Проверяем токен бота с более детальной диагностикой
     bot_token_env = os.getenv("BOT_TOKEN", "")
-    expected_token = "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw"
 
     print(f"🔍 Детальная проверка BOT_TOKEN:")
     print(f"  Значение установлено: {'Да' if bot_token_env else 'Нет'}")
