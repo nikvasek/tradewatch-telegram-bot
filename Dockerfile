@@ -1,4 +1,4 @@
-# Railway Hobby Plan - ПРИНУДИТЕЛЬНЫЙ HOBBY РЕЖИМ v6.0 - ВСЕГДА УСКОРЕНИЕ 4X
+# Railway Hobby Plan - СУПЕР УСКОРЕНИЕ 400 EAN v7.0 - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
