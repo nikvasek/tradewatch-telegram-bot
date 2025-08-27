@@ -1,4 +1,4 @@
-# Railway Hobby Plan - Selenium Chrome Dockerfile (с ускорением 4x) - FORCE REBUILD v4.0 - ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА
+# Railway Hobby Plan - Selenium Chrome Dockerfile (с ускорением 4x) - FORCE REBUILD v5.0 - ЭКСТРЕННЫЙ ПЕРЕЗАПУСК
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
