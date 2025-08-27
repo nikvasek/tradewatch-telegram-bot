@@ -44,8 +44,8 @@ file_handler = logging.FileHandler("bot_activity.log")
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 activity_logger.addHandler(file_handler)
 
-# Токен бота (замените на ваш токен или используйте переменную окружения)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7402798055:AAGEgTHl5NFPyZ5QCUX7OIjDrNzENqSMGeI")
+# Токен бота (используйте переменную окружения для безопасности)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw")
 
 # ID владельца бота (замените на ваш Telegram ID или используйте переменную окружения)  
 OWNER_ID = int(os.getenv("OWNER_ID", "6755735414"))
@@ -183,6 +183,7 @@ class ProcessingTimer:
 
 class TelegramBot:
     def __init__(self, token: str):
+        logger.info(f"🔧 Инициализация TelegramBot с токеном: {token[:10]}...")
         self.token = token
         # Создаём Application с увеличенными таймаутами для больших файлов
         from telegram.request import HTTPXRequest
@@ -193,6 +194,7 @@ class TelegramBot:
             connect_timeout=60  # 1 минута на подключение
         )
         self.application = Application.builder().token(token).request(request).build()
+        logger.info("✅ Application создана успешно")
 
         # ДОБАВИТЬ: Логирование конфигурации при запуске бота
         print("🚀 ЗАПУСК TELEGRAM БОТА")
@@ -207,6 +209,7 @@ class TelegramBot:
         print("=" * 50)
 
         self.setup_handlers()
+        logger.info("✅ Обработчики настроены успешно")
 
     async def setup_bot_commands(self):
         """Настройка команд бота в меню"""
@@ -701,20 +704,57 @@ class TelegramBot:
         )
 
     def run(self):
-        """Запуск бота"""
+        """Запуск бота с обработкой конфликтов"""
         logger.info("Запуск Telegram бота...")
-        
+
         # Настраиваем команды меню при запуске
         async def post_init(application):
             await self.setup_bot_commands()
-        
+
         self.application.post_init = post_init
-        self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+        try:
+            # Запускаем polling с обработкой ошибок
+            self.application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True  # Сбрасываем pending updates при перезапуске
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при запуске бота: {e}")
+            if "Conflict" in str(e):
+                logger.error("❌ КОНФЛИКТ: Другая копия бота уже запущена!")
+                logger.error("🔧 РЕШЕНИЕ: Остановите другие экземпляры бота")
+                logger.error("   1. Проверьте Railway dashboard - остановите лишние deployments")
+                logger.error("   2. Убедитесь что локально не запущен бот")
+                print("\n❌ КОНФЛИКТ ОБНАРУЖЕН!")
+                print("Другая копия бота уже запущена.")
+                print("Решение:")
+                print("1. Остановите другие deployments в Railway dashboard")
+                print("2. Убедитесь что бот не запущен локально")
+                print("3. Подождите 1-2 минуты и попробуйте снова")
+            else:
+                logger.error(f"Неизвестная ошибка: {e}")
+            raise
 
 def main():
     """Основная функция"""
-    bot = TelegramBot(BOT_TOKEN)
-    bot.run()
+    # Проверяем токен бота
+    if not BOT_TOKEN or BOT_TOKEN == "7402798055:AAGEgTHl5NFPyZ5QCUX7OIjDrNzENqSMGeI":
+        logger.error("❌ BOT_TOKEN не установлен! Установите переменную окружения BOT_TOKEN")
+        print("❌ ОШИБКА: BOT_TOKEN не установлен!")
+        print("Установите переменную окружения BOT_TOKEN в Railway")
+        return
+
+    logger.info(f"✅ BOT_TOKEN найден, начинаем инициализацию...")
+
+    try:
+        bot = TelegramBot(BOT_TOKEN)
+        bot.run()
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем")
+    except Exception as e:
+        logger.error(f"Критическая ошибка при запуске бота: {e}")
+        raise
 
 if __name__ == "__main__":
     main()
