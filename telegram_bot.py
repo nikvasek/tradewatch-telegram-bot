@@ -758,11 +758,40 @@ class TelegramBot:
 
 def main():
     """Основная функция"""
+    # Отображаем информацию об окружении для отладки
+    logger.info("🔍 Проверяем переменные окружения...")
+    print("🔍 Проверяем переменные окружения...")
+
+    # Показываем статус переменных (без значений по соображениям безопасности)
+    bot_token_status = "✅ УСТАНОВЛЕН" if BOT_TOKEN and BOT_TOKEN != "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw" else "❌ НЕ УСТАНОВЛЕН"
+    tradewatch_email_status = "✅ УСТАНОВЛЕН" if os.getenv("TRADEWATCH_EMAIL") else "❌ НЕ УСТАНОВЛЕН"
+    tradewatch_password_status = "✅ УСТАНОВЛЕН" if os.getenv("TRADEWATCH_PASSWORD") else "❌ НЕ УСТАНОВЛЕН"
+
+    print(f"BOT_TOKEN: {bot_token_status}")
+    print(f"TRADEWATCH_EMAIL: {tradewatch_email_status}")
+    print(f"TRADEWATCH_PASSWORD: {tradewatch_password_status}")
+    print("")
+
     # Проверяем токен бота
     if not BOT_TOKEN or BOT_TOKEN == "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw":
         logger.error("❌ BOT_TOKEN не установлен! Установите переменную окружения BOT_TOKEN")
         print("❌ ОШИБКА: BOT_TOKEN не установлен!")
-        print("Установите переменную окружения BOT_TOKEN в Railway")
+        print("")
+        print("🔧 РЕШЕНИЕ:")
+        print("1. Перейдите в Railway Dashboard: https://railway.app/dashboard")
+        print("2. Выберите проект 'tradewatch-telegram-bot'")
+        print("3. Перейдите во вкладку 'Variables'")
+        print("4. Нажмите 'Add Variable'")
+        print("5. Добавьте переменную:")
+        print("   Name: BOT_TOKEN")
+        print("   Value: 8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw")
+        print("")
+        print("6. Также добавьте переменные для TradeWatch:")
+        print("   TRADEWATCH_EMAIL: ваш_email@example.com")
+        print("   TRADEWATCH_PASSWORD: ваш_пароль")
+        print("")
+        print("7. Перезапустите deployment")
+        print("")
         return
 
     logger.info(f"✅ BOT_TOKEN найден, начинаем инициализацию...")
