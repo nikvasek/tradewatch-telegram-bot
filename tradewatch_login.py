@@ -22,18 +22,58 @@ from selenium.webdriver.common.window import WindowTypes
 TRADEWATCH_EMAIL = os.getenv("TRADEWATCH_EMAIL", "TRADEWATCH_EMAIL")
 TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
+def cleanup_chrome_temp_dirs():
+    """
+    Очистка старых директорий Chrome user data для предотвращения конфликтов
+    """
+    try:
+        import glob
+        import shutil
+
+        # Находим все директории chrome_user_data
+        pattern = "/tmp/chrome_user_data_*"
+        old_dirs = glob.glob(pattern)
+
+        cleaned_count = 0
+        for old_dir in old_dirs:
+            try:
+                if os.path.exists(old_dir):
+                    shutil.rmtree(old_dir)
+                    cleaned_count += 1
+            except Exception as e:
+                print(f"⚠️ Не удалось удалить {old_dir}: {e}")
+
+        if cleaned_count > 0:
+            print(f"🧹 Очищено {cleaned_count} старых директорий Chrome")
+
+    except Exception as e:
+        print(f"⚠️ Ошибка при очистке директорий Chrome: {e}")
+
 def get_railway_chrome_options(batch_number=None):
     """
     Получить настройки Chrome для Railway deployment
     """
     options = webdriver.ChromeOptions()
-    
-    # Уникальная директория для каждой сессии
+
+    # Уникальная директория для каждой сессии с максимальной уникальностью
     if batch_number:
-        user_data_dir = f"/tmp/chrome_user_data_{batch_number}_{int(time.time())}"
+        # Добавляем больше уникальности: PID, thread ID, и микросекунды
+        import os
+        import threading
+        unique_id = f"{batch_number}_{os.getpid()}_{threading.current_thread().ident}_{int(time.time() * 1000000)}"
+        user_data_dir = f"/tmp/chrome_user_data_{unique_id}"
         options.add_argument(f"--user-data-dir={user_data_dir}")
         print(f"🔧 Используем уникальную директорию: {user_data_dir}")
-    
+
+        # Очищаем директорию если она существует
+        if os.path.exists(user_data_dir):
+            try:
+                import shutil
+                shutil.rmtree(user_data_dir)
+                print(f"🧹 Очищена существующая директория: {user_data_dir}")
+            except Exception as e:
+                print(f"⚠️ Не удалось очистить директорию {user_data_dir}: {e}")
+
     # Базовые настройки для headless режима
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -44,7 +84,7 @@ def get_railway_chrome_options(batch_number=None):
     options.add_argument("--disable-logging")
     options.add_argument("--disable-web-security")
     options.add_argument("--allow-running-insecure-content")
-    
+
     # Railway специфичные настройки
     options.add_argument("--disable-background-timer-throttling")
     options.add_argument("--disable-backgrounding-occluded-windows")
@@ -54,7 +94,7 @@ def get_railway_chrome_options(batch_number=None):
     options.add_argument("--disable-sync")
     options.add_argument("--disable-background-networking")
     options.add_argument("--single-process")
-    
+
     # Проверяем переменные окружения Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
         print("🚀 Railway Hobby план - используем настройки для максимальной скорости")
@@ -67,7 +107,7 @@ def get_railway_chrome_options(batch_number=None):
         options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
         options.add_argument("--disable-background-media-download")  # Отключаем ненужное
         options.add_argument("--disable-component-extensions-with-background-pages")
-    
+
     return options
 
 def get_batch_size():
@@ -1186,6 +1226,11 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
 
 def process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, max_workers):
     """Параллельная обработка батчей в изолированных пространствах"""
+
+    # Очищаем старые директории Chrome перед запуском
+    print("🧹 Очищаем старые директории Chrome перед запуском...")
+    cleanup_chrome_temp_dirs()
+
     downloaded_files = []
     processed_count = 0
     isolated_dirs = []
@@ -1700,9 +1745,32 @@ def process_batch_with_new_browser_isolated(ean_codes_batch, download_dir, batch
     }
     options.add_experimental_option("prefs", prefs)
 
-    # 🆕 СОЗДАЕМ НОВЫЙ ДРАЙВЕР для каждой группы
-    service = get_chrome_service()
-    driver = webdriver.Chrome(service=service, options=options)
+    # 🆕 СОЗДАЕМ НОВЫЙ ДРАЙВЕР для каждой группы с retry логикой
+    driver = None
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        try:
+            service = get_chrome_service()
+            driver = webdriver.Chrome(service=service, options=options)
+            print(f"✅ Chrome драйвер создан успешно (попытка {attempt + 1})")
+            break
+        except Exception as e:
+            print(f"❌ Ошибка создания Chrome драйвера (попытка {attempt + 1}/{max_retries}): {e}")
+
+            if attempt < max_retries - 1:
+                # Очищаем директории и ждем перед следующей попыткой
+                cleanup_chrome_temp_dirs()
+                wait_time = 2 * (attempt + 1)  # 2s, 4s, 6s
+                print(f"⏳ Ждем {wait_time} секунд перед следующей попыткой...")
+                time.sleep(wait_time)
+            else:
+                print("❌ Превышено максимальное количество попыток создания драйвера")
+                return None
+
+    if not driver:
+        print("❌ Не удалось создать Chrome драйвер")
+        return None
 
     try:
         print(f"Обработка группы {batch_number} с {len(ean_codes_batch)} EAN кодами...")
