@@ -16,7 +16,7 @@ import pandas as pd
 try:
     from selenium import webdriver
     SELENIUM_AVAILABLE = True
-    from tradewatch_login import process_supplier_file_with_tradewatch, get_parallel_sessions, get_batch_size
+    from tradewatch_login import process_supplier_file_with_tradewatch
     print("✅ Selenium доступен - TradeWatch интеграция активна")
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -44,8 +44,8 @@ file_handler = logging.FileHandler("bot_activity.log")
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 activity_logger.addHandler(file_handler)
 
-# Токен бота (используйте переменную окружения для безопасности)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw")
+# Токен бота (замените на ваш токен или используйте переменную окружения)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "7402798055:AAGEgTHl5NFPyZ5QCUX7OIjDrNzENqSMGeI")
 
 # ID владельца бота (замените на ваш Telegram ID или используйте переменную окружения)  
 OWNER_ID = int(os.getenv("OWNER_ID", "6755735414"))
@@ -183,7 +183,6 @@ class ProcessingTimer:
 
 class TelegramBot:
     def __init__(self, token: str):
-        logger.info(f"🔧 Инициализация TelegramBot с токеном: {token[:10]}...")
         self.token = token
         # Создаём Application с увеличенными таймаутами для больших файлов
         from telegram.request import HTTPXRequest
@@ -194,22 +193,7 @@ class TelegramBot:
             connect_timeout=60  # 1 минута на подключение
         )
         self.application = Application.builder().token(token).request(request).build()
-        logger.info("✅ Application создана успешно")
-
-        # ДОБАВИТЬ: Логирование конфигурации при запуске бота
-        print("🚀 ЗАПУСК TELEGRAM БОТА")
-        print("=" * 50)
-        print("� Railway Hobby план - максимальная производительность")
-
-        parallel_sessions = get_parallel_sessions()
-        batch_size = get_batch_size()
-        print(f"🔄 Количество параллельных сессий: {parallel_sessions}")
-        print(f"📦 Размер батча: {batch_size} EAN кодов")
-        print(f"⚡ Расчетная производительность: {batch_size * parallel_sessions} EAN одновременно")
-        print("=" * 50)
-
         self.setup_handlers()
-        logger.info("✅ Обработчики настроены успешно")
 
     async def setup_bot_commands(self):
         """Настройка команд бота в меню"""
@@ -543,13 +527,6 @@ class TelegramBot:
             import threading
             
             def run_processing():
-                # ДОБАВИТЬ: Логирование конфигурации обработки
-                print("� Railway Hobby план - запускаем параллельную обработку")
-                parallel_sessions = get_parallel_sessions()
-                batch_size = get_batch_size()
-                print(f"🔄 Параллельные сессии: {parallel_sessions}")
-                print(f"📦 Размер батча: {batch_size} EAN кодов")
-
                 return process_supplier_with_tradewatch_auto(
                     supplier_file_path, 
                     str(user_temp_dir),
@@ -704,151 +681,20 @@ class TelegramBot:
         )
 
     def run(self):
-        """Запуск бота с обработкой конфликтов"""
+        """Запуск бота"""
         logger.info("Запуск Telegram бота...")
-
+        
         # Настраиваем команды меню при запуске
         async def post_init(application):
             await self.setup_bot_commands()
-
+        
         self.application.post_init = post_init
-
-        max_retries = 3
-        retry_count = 0
-
-        while retry_count < max_retries:
-            try:
-                # Запускаем polling с обработкой ошибок
-                self.application.run_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True  # Сбрасываем pending updates при перезапуске
-                )
-                break  # Успешный запуск, выходим из цикла
-
-            except Exception as e:
-                logger.error(f"Ошибка при запуске бота (попытка {retry_count + 1}/{max_retries}): {e}")
-
-                if "Conflict" in str(e):
-                    logger.error("❌ КОНФЛИКТ: Другая копия бота уже запущена!")
-                    print("\n❌ КОНФЛИКТ ОБНАРУЖЕН!")
-                    print("Другая копия бота уже запущена.")
-                    print("Решение:")
-                    print("1. Остановите другие deployments в Railway dashboard")
-                    print("2. Убедитесь что бот не запущен локально")
-                    print("3. Подождите 1-2 минуты и попробуйте снова")
-
-                    if retry_count < max_retries - 1:
-                        wait_time = 30 * (retry_count + 1)  # 30s, 60s, 90s
-                        logger.info(f"⏳ Ждем {wait_time} секунд перед следующей попыткой...")
-                        print(f"⏳ Ждем {wait_time} секунд перед следующей попыткой...")
-                        import time
-                        time.sleep(wait_time)
-                        retry_count += 1
-                    else:
-                        logger.error("❌ Превышено максимальное количество попыток. Останавливаемся.")
-                        print("❌ Превышено максимальное количество попыток.")
-                        break
-                else:
-                    logger.error(f"Неизвестная ошибка: {e}")
-                    break
-
-        if retry_count >= max_retries:
-            logger.error("❌ Не удалось запустить бота после всех попыток")
-            print("❌ Не удалось запустить бота после всех попыток")
+        self.application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 def main():
     """Основная функция"""
-    # Отображаем информацию об окружении для отладки
-    logger.info("🔍 Проверяем переменные окружения...")
-    print("🔍 Проверяем переменные окружения...")
-
-    # Определяем ожидаемый токен
-    expected_token = "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw"
-
-    # Показываем статус переменных (без значений по соображениям безопасности)
-    bot_token_raw = os.getenv("BOT_TOKEN", "")
-    bot_token_status = "✅ УСТАНОВЛЕН" if bot_token_raw and bot_token_raw == expected_token else "❌ НЕ УСТАНОВЛЕН"
-
-    # Отладочная информация
-    print(f"BOT_TOKEN: {bot_token_status}")
-    if bot_token_raw:
-        print(f"BOT_TOKEN длина: {len(bot_token_raw)} символов")
-        print(f"BOT_TOKEN начинается с: {bot_token_raw[:20]}..." if len(bot_token_raw) > 20 else f"BOT_TOKEN: {bot_token_raw}")
-        if bot_token_raw == expected_token:
-            print("BOT_TOKEN статус: ✅ ПРАВИЛЬНЫЙ ТОКЕН")
-        else:
-            print("BOT_TOKEN статус: ❌ НЕПРАВИЛЬНЫЙ ТОКЕН")
-    else:
-        print("BOT_TOKEN: (пустое значение)")
-
-    tradewatch_email_status = "✅ УСТАНОВЛЕН" if os.getenv("TRADEWATCH_EMAIL") else "❌ НЕ УСТАНОВЛЕН"
-    tradewatch_password_status = "✅ УСТАНОВЛЕН" if os.getenv("TRADEWATCH_PASSWORD") else "❌ НЕ УСТАНОВЛЕН"
-
-    print(f"TRADEWATCH_EMAIL: {tradewatch_email_status}")
-    print(f"TRADEWATCH_PASSWORD: {tradewatch_password_status}")
-    print("")
-
-    # Показываем все переменные окружения (для отладки)
-    print("🔍 Все переменные окружения содержащие 'BOT' или 'TRADE':")
-    for key, value in os.environ.items():
-        if 'BOT' in key.upper() or 'TRADE' in key.upper():
-            masked_value = value[:10] + "..." + value[-5:] if len(value) > 15 else value
-            print(f"  {key}: {masked_value}")
-    print("")
-
-    # Проверяем токен бота с более детальной диагностикой
-    bot_token_env = os.getenv("BOT_TOKEN", "")
-
-    print(f"🔍 Детальная проверка BOT_TOKEN:")
-    print(f"  Значение установлено: {'Да' if bot_token_env else 'Нет'}")
-    print(f"  Длина значения: {len(bot_token_env)} символов")
-    print(f"  Ожидаемая длина: {len(expected_token)} символов")
-    print(f"  Совпадает с ожидаемым: {'Да' if bot_token_env == expected_token else 'Нет'}")
-    print("")
-
-    if not bot_token_env:
-        logger.error("❌ BOT_TOKEN не установлен!")
-        print("❌ ПРОБЛЕМА С BOT_TOKEN!")
-        print("")
-        print("🔍 ПРИЧИНА: Переменная BOT_TOKEN не найдена")
-        print("")
-        print("🔧 РЕШЕНИЕ:")
-        print("1. Перейдите в Railway Dashboard: https://railway.app/dashboard")
-        print("2. Выберите проект 'tradewatch-telegram-bot'")
-        print("3. Перейдите во вкладку 'Variables' в вашем СЕРВИСЕ")
-        print("4. Добавьте переменную:")
-        print(f"   Name: BOT_TOKEN")
-        print(f"   Value: {expected_token}")
-        print("5. Нажмите 'Save' и затем 'Redeploy'")
-        print("")
-        return
-
-    if bot_token_env != expected_token:
-        logger.error(f"❌ BOT_TOKEN установлен неправильно! Ожидалось: {expected_token[:20]}..., Получено: {bot_token_env[:20]}...")
-        print("❌ ПРОБЛЕМА С BOT_TOKEN!")
-        print("")
-        print("� ПРИЧИНА: Значение BOT_TOKEN не совпадает с ожидаемым")
-        print(f"   Ожидаемое: {expected_token}")
-        print(f"   Полученное: {bot_token_env}")
-        print("")
-        print("🔧 РЕШЕНИЕ:")
-        print("1. Скопируйте точное значение:")
-        print(f"   {expected_token}")
-        print("2. Обновите переменную BOT_TOKEN в Railway")
-        print("3. Перезапустите deployment")
-        print("")
-        return
-
-    logger.info(f"✅ BOT_TOKEN найден, начинаем инициализацию...")
-
-    try:
-        bot = TelegramBot(BOT_TOKEN)
-        bot.run()
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем")
-    except Exception as e:
-        logger.error(f"Критическая ошибка при запуске бота: {e}")
-        raise
+    bot = TelegramBot(BOT_TOKEN)
+    bot.run()
 
 if __name__ == "__main__":
     main()

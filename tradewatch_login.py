@@ -11,7 +11,6 @@ import glob
 import shutil
 import pandas as pd
 import hashlib
-import uuid
 from pathlib import Path
 import threading
 import concurrent.futures
@@ -22,110 +21,31 @@ from selenium.webdriver.common.window import WindowTypes
 TRADEWATCH_EMAIL = os.getenv("TRADEWATCH_EMAIL", "TRADEWATCH_EMAIL")
 TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
-def cleanup_chrome_temp_dirs():
-    """
-    Агрессивная очистка всех Chrome процессов и директорий
-    """
-    try:
-        import glob
-        import shutil
-        import subprocess
-
-        print("🧹 Агрессивная очистка Chrome процессов и директорий...")
-
-        # 1. Убиваем все процессы Chrome
-        try:
-            # Находим и убиваем все процессы chrome/chromium
-            result = subprocess.run(['pkill', '-f', 'chrome'], capture_output=True, text=True)
-            if result.returncode == 0:
-                print("✅ Найденные Chrome процессы остановлены")
-            else:
-                print("ℹ️ Активные Chrome процессы не найдены")
-        except Exception as e:
-            print(f"⚠️ Не удалось остановить Chrome процессы: {e}")
-
-        # 2. Ждем завершения процессов
-        time.sleep(2)
-
-        # 3. Очищаем все директории chrome_user_data
-        pattern = "/tmp/chrome_user_data_*"
-        old_dirs = glob.glob(pattern)
-
-        cleaned_count = 0
-        for old_dir in old_dirs:
-            try:
-                if os.path.exists(old_dir):
-                    shutil.rmtree(old_dir)
-                    cleaned_count += 1
-            except Exception as e:
-                print(f"⚠️ Не удалось удалить {old_dir}: {e}")
-
-        if cleaned_count > 0:
-            print(f"🧹 Очищено {cleaned_count} директорий Chrome")
-
-        # 4. Очищаем другие возможные временные директории Chrome
-        chrome_temp_patterns = [
-            "/tmp/.org.chromium.*",
-            "/tmp/.com.google.Chrome.*",
-            "/tmp/Chromium-*",
-            "/tmp/Chrome-*"
-        ]
-
-        for pattern in chrome_temp_patterns:
-            temp_dirs = glob.glob(pattern)
-            for temp_dir in temp_dirs:
-                try:
-                    if os.path.exists(temp_dir):
-                        shutil.rmtree(temp_dir)
-                        print(f"🧹 Очищена временная директория: {temp_dir}")
-                except Exception as e:
-                    print(f"⚠️ Не удалось удалить временную директорию {temp_dir}: {e}")
-
-        # 5. Очищаем /tmp от других Chrome файлов
-        try:
-            result = subprocess.run(['find', '/tmp', '-name', '*chrom*', '-type', 'f', '-delete'],
-                                  capture_output=True, text=True)
-            if result.returncode == 0:
-                print("🧹 Очищены временные файлы Chrome")
-        except Exception as e:
-            print(f"⚠️ Не удалось очистить временные файлы: {e}")
-
-    except Exception as e:
-        print(f"⚠️ Ошибка при агрессивной очистке: {e}")
+def is_hobby_plan():
+    """Определяет, используется ли Railway Hobby план"""
+    # Принудительно включаем Hobby режим для ускорения
+    # TODO: Установить RAILWAY_PLAN=hobby в Railway Dashboard
+    
+    # Проверяем наличие переменной окружения или другой индикации Hobby плана
+    hobby_indicators = [
+        os.environ.get('RAILWAY_PLAN') == 'hobby',
+        os.environ.get('MEMORY_LIMIT', '512') != '512',  # Больше памяти = Hobby
+        'HOBBY' in os.environ.get('DEPLOYMENT_TYPE', '').upper(),
+        True  # ВРЕМЕННО: Принудительно включаем Hobby режим
+    ]
 
 def get_railway_chrome_options(batch_number=None):
     """
     Получить настройки Chrome для Railway deployment
     """
     options = webdriver.ChromeOptions()
-
-    # Уникальная директория для каждой сессии с максимальной уникальностью
+    
+    # Уникальная директория для каждой сессии
     if batch_number:
-        # Добавляем больше уникальности: PID, thread ID, и микросекунды
-        import os
-        import threading
-        unique_id = f"{batch_number}_{os.getpid()}_{threading.current_thread().ident}_{int(time.time() * 1000000)}"
-        user_data_dir = f"/tmp/chrome_user_data_{unique_id}"
-
-        # Создаем директорию заранее и очищаем если существует
-        if os.path.exists(user_data_dir):
-            try:
-                import shutil
-                shutil.rmtree(user_data_dir)
-                print(f"🧹 Очищена существующая директория: {user_data_dir}")
-            except Exception as e:
-                print(f"⚠️ Не удалось очистить директорию {user_data_dir}: {e}")
-
-        try:
-            os.makedirs(user_data_dir, exist_ok=True)
-        except Exception as e:
-            # Если не можем создать, используем системную tmp
-            user_data_dir = f"/tmp/chrome_{unique_id}"
-            print(f"🔄 Переключаемся на альтернативную директорию: {user_data_dir}")
-
+        user_data_dir = f"/tmp/chrome_user_data_{batch_number}_{int(time.time())}"
         options.add_argument(f"--user-data-dir={user_data_dir}")
         print(f"🔧 Используем уникальную директорию: {user_data_dir}")
-
+    
     # Базовые настройки для headless режима
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -136,33 +56,8 @@ def get_railway_chrome_options(batch_number=None):
     options.add_argument("--disable-logging")
     options.add_argument("--disable-web-security")
     options.add_argument("--allow-running-insecure-content")
-
-    # Агрессивные настройки для предотвращения конфликтов сессий
-    options.add_argument("--disable-application-cache")
-    options.add_argument("--disable-cache")
-    options.add_argument("--disable-offline-load-stale-cache")
-    options.add_argument("--disk-cache-dir=/dev/null")
-    options.add_argument("--disable-plugins")
-    options.add_argument("--disable-plugins-discovery")
-    options.add_argument("--disable-preconnect")
-    options.add_argument("--disable-hang-monitor")
-    options.add_argument("--disable-client-side-phishing-detection")
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--disable-prompt-on-repost")
-    options.add_argument("--disable-ipc-flooding-protection")
-    options.add_argument("--disable-renderer-accessibility")
-    options.add_argument("--no-first-run")
-    options.add_argument("--disable-default-apps")
-    options.add_argument("--disable-infobars")
-    options.add_argument("--disable-notifications")
-    options.add_argument("--disable-session-crashed-bubble")
-    options.add_argument("--disable-component-extensions-with-background-pages")
-    options.add_argument("--disable-features=VizDisplayCompositor")
-    options.add_argument("--disable-accelerated-video-decode")
-    options.add_argument("--disable-accelerated-video-encode")
-    options.add_argument("--use-gl=swiftshader")
-    options.add_argument("--disable-background-media-download")
-    options.add_argument("--disable-software-rasterizer")
+    
+    # Railway специфичные настройки
     options.add_argument("--disable-background-timer-throttling")
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-renderer-backgrounding")
@@ -171,35 +66,64 @@ def get_railway_chrome_options(batch_number=None):
     options.add_argument("--disable-sync")
     options.add_argument("--disable-background-networking")
     options.add_argument("--single-process")
-
+    
     # Проверяем переменные окружения Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        print("🚀 Railway Hobby план - используем настройки для максимальной скорости")
-        # Оптимизированные настройки для Hobby плана
-        options.add_argument("--max_old_space_size=1024MB")  # Больше памяти для Hobby
-        options.add_argument("--enable-fast-unload")
-        options.add_argument("--aggressive-cache-discard")
-        options.add_argument("--enable-parallel-downloading")  # Параллельная загрузка
-        options.add_argument("--enable-quic")  # QUIC протокол для скорости
-        options.add_argument("--enable-features=NetworkService,NetworkServiceInProcess")
-        options.add_argument("--disable-background-media-download")  # Отключаем ненужное
-        options.add_argument("--disable-component-extensions-with-background-pages")
-
+        is_hobby = os.getenv('RAILWAY_PLAN') == 'hobby' or os.getenv('RAILWAY_MEMORY_LIMIT', '512') != '512'
+        
+        if is_hobby:
+            print("� Railway Hobby план - используем настройки для максимальной скорости")
+            # Настройки для скорости на Hobby плане
+            options.add_argument("--max_old_space_size=8192")  # Больше памяти
+            options.add_argument("--enable-fast-unload")
+            options.add_argument("--aggressive-cache-discard")
+        else:
+            print("🚂 Railway бесплатный план - используем настройки для стабильности")
+            options.add_argument("--memory-pressure-off")
+            options.add_argument("--max_old_space_size=4096")
+            # Дополнительные настройки для экономии памяти на бесплатном плане
+            options.add_argument("--disable-background-timer-throttling")
+            options.add_argument("--disable-backing-store-limit")
+            options.add_argument("--disable-hang-monitor")
+            options.add_argument("--disable-client-side-phishing-detection")
+            options.add_argument("--disable-popup-blocking")
+            options.add_argument("--disable-prompt-on-repost")
+            options.add_argument("--disable-renderer-backgrounding")
+            options.add_argument("--disable-ipc-flooding-protection")
+    
     return options
 
 def get_batch_size():
     """
-    Оптимальный размер батча для Railway Hobby плана
+    Получить оптимальный размер батча в зависимости от окружения и плана
     """
-    print("🚀 Railway Hobby план - используем батчи по 400 кодов для максимальной скорости")
-    return 400  # Оптимальный размер для Hobby плана
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+        # Используем нашу новую функцию is_hobby_plan()
+        if is_hobby_plan():
+            print("🚀 Railway Hobby план - используем батчи по 200 кодов для максимальной скорости")
+            return 200  # Большие батчи для Hobby плана
+        else:
+            print("🚂 Railway бесплатный план - используем батчи по 400 кодов")
+            return 400   # Увеличенные батчи для бесплатного плана
+    else:
+        print("💻 Локальное окружение - используем батчи по 300 кодов")
+        return 300
 
 def get_parallel_sessions():
     """
-    Количество параллельных сессий для Railway Hobby плана
+    Получить количество параллельных сессий для обработки
     """
-    print("🚀 Hobby план - используем 6 параллельные сессии для максимальной скорости")
-    return 6  # Оптимальное количество для Hobby плана
+    if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
+        # Используем нашу функцию is_hobby_plan() вместо прямой проверки переменных
+        if is_hobby_plan():
+            print("🚀 Hobby план - используем 4 параллельные сессии для максимальной скорости")
+            return 4  # 4 параллельные сессии для Hobby плана (максимальное ускорение)
+        else:
+            print("🚂 Бесплатный план - используем 1 сессию")
+            return 1
+    else:
+        print("💻 Локальное окружение - используем 2 сессии")
+        return 2
 
 def cleanup_chrome_temp_dirs():
     """
@@ -1186,7 +1110,7 @@ def process_batch_in_session(driver, ean_codes_batch, download_dir, batch_number
 
 
 def process_batches_sequential(batches, download_dir, headless, progress_callback):
-    """Последовательная обработка батчей"""
+    """Последовательная обработка батчей (для бесплатного плана)"""
     downloaded_files = []
     processed_count = 0
     
@@ -1216,45 +1140,35 @@ def process_batches_sequential(batches, download_dir, headless, progress_callbac
     return downloaded_files
 
 
-def process_batch_worker_isolated(args):
-    """Рабочая функция для обработки одного батча в изолированном пространстве"""
-    batch, base_download_dir, batch_index, headless = args
-
-    # Создаем уникальную директорию для этой сессии
-    session_id = str(uuid.uuid4())[:8]
-    isolated_dir = os.path.join(base_download_dir, f"session_{session_id}")
-    os.makedirs(isolated_dir, exist_ok=True)
-
+def process_batch_worker(args):
+    """Рабочая функция для обработки одного батча в параллельном режиме"""
+    batch, download_dir, batch_index, headless = args
+    
     try:
-        print(f"\n🚀 ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Обрабатываем {len(batch)} EAN кодов в {isolated_dir}")
-
-        # Очищаем временные директории Chrome
+        print(f"\n🚀 ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Обрабатываем {len(batch)} EAN кодов")
+        
+        # Очищаем временные директории Chrome перед новой сессией
         cleanup_chrome_temp_dirs()
-
+        
         # Обрабатываем группу в новой сессии браузера
-        result = process_batch_with_new_browser_isolated(batch, isolated_dir, batch_index, headless)
-
+        result = process_batch_with_new_browser(batch, download_dir, batch_index, headless)
+        
         if result:
-            print(f"✅ ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Группа обработана успешно")
-            return result, len(batch), isolated_dir
+            print(f"✅ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Группа обработана успешно")
+            return result, len(batch)
         else:
-            print(f"❌ ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Ошибка при обработке")
-            # Очищаем пустую директорию
-            shutil.rmtree(isolated_dir, ignore_errors=True)
-            return None, 0, None
-
+            print(f"❌ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Ошибка при обработке")
+            return None, 0
+            
     except Exception as e:
-        print(f"❌ ИЗОЛИРОВАННАЯ СЕССИЯ {batch_index}: Исключение - {e}")
-        # Очищаем директорию при ошибке
-        shutil.rmtree(isolated_dir, ignore_errors=True)
-        return None, 0, None
+        print(f"❌ ПАРАЛЛЕЛЬНАЯ СЕССИЯ {batch_index}: Исключение - {e}")
+        return None, 0
 
 
 def process_batches_parallel(batches, download_dir, headless, progress_callback, max_workers):
-    """Параллельная обработка батчей"""
+    """Параллельная обработка батчей (для Hobby плана)"""
     downloaded_files = []
     processed_count = 0
-    isolated_dirs = []  # Список изолированных директорий для объединения
     
     # Подготавливаем аргументы для воркеров
     worker_args = []
@@ -1266,20 +1180,18 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
     # Используем ThreadPoolExecutor для параллельной обработки
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Отправляем все задачи
-        future_to_batch = {executor.submit(process_batch_worker_isolated, args): i for i, args in enumerate(worker_args, 1)}
+        future_to_batch = {executor.submit(process_batch_worker, args): i for i, args in enumerate(worker_args, 1)}
         
         # Собираем результаты по мере выполнения
         for future in concurrent.futures.as_completed(future_to_batch):
             batch_num = future_to_batch[future]
             try:
-                result, batch_size, isolated_dir = future.result()
+                result, batch_size = future.result()
                 if result:
                     downloaded_files.append(result)
                     processed_count += batch_size
-                    if isolated_dir:
-                        isolated_dirs.append(isolated_dir)
                     print(f"✅ ПАРАЛЛЕЛЬНО: Батч {batch_num} завершен, обработано {batch_size} кодов")
-
+                    
                     # Обновляем прогресс через callback
                     if progress_callback:
                         try:
@@ -1291,114 +1203,9 @@ def process_batches_parallel(batches, download_dir, headless, progress_callback,
                     
             except Exception as exc:
                 print(f"❌ ПАРАЛЛЕЛЬНО: Батч {batch_num} вызвал исключение: {exc}")
-
-    # Объединяем результаты из изолированных директорий
-    if isolated_dirs:
-        merged_files = merge_isolated_results(download_dir, isolated_dirs, progress_callback)
-        downloaded_files.extend(merged_files)
-
+    
     print(f"🏁 ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ЗАВЕРШЕНА: {len(downloaded_files)} файлов из {len(batches)} батчей")
     return downloaded_files
-
-
-def process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, max_workers):
-    """Параллельная обработка батчей в изолированных пространствах"""
-
-    # Очищаем старые директории Chrome перед запуском
-    print("🧹 Очищаем старые директории Chrome перед запуском...")
-    cleanup_chrome_temp_dirs()
-
-    downloaded_files = []
-    processed_count = 0
-    isolated_dirs = []
-
-    # Подготавливаем аргументы для воркеров
-    worker_args = []
-    for i, batch in enumerate(batches, 1):
-        worker_args.append((batch, download_dir, i, headless))
-
-    print(f"🚀 ИЗОЛИРОВАННАЯ ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА: Запускаем {max_workers} воркеров для {len(batches)} батчей")
-
-    # Используем ThreadPoolExecutor для параллельной обработки
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Отправляем все задачи
-        future_to_batch = {executor.submit(process_batch_worker_isolated, args): i for i, args in enumerate(worker_args, 1)}
-
-        # Собираем результаты по мере выполнения
-        for future in concurrent.futures.as_completed(future_to_batch):
-            batch_num = future_to_batch[future]
-            try:
-                result, batch_size, isolated_dir = future.result()
-                if result:
-                    downloaded_files.append(result)
-                    processed_count += batch_size
-                    if isolated_dir:
-                        isolated_dirs.append(isolated_dir)
-                    print(f"✅ ИЗОЛИРОВАННО: Батч {batch_num} завершен, обработано {batch_size} кодов")
-
-                    # Обновляем прогресс через callback
-                    if progress_callback:
-                        try:
-                            progress_callback(processed_count)
-                        except Exception as e:
-                            print(f"Ошибка в progress_callback: {e}")
-                else:
-                    print(f"❌ ИЗОЛИРОВАННО: Батч {batch_num} не удалось обработать")
-
-            except Exception as exc:
-                print(f"❌ ИЗОЛИРОВАННО: Батч {batch_num} вызвал исключение: {exc}")
-
-    # Объединяем результаты из изолированных директорий
-    if isolated_dirs:
-        merged_files = merge_isolated_results(download_dir, isolated_dirs, progress_callback)
-        downloaded_files.extend(merged_files)
-
-    print(f"🏁 ИЗОЛИРОВАННАЯ ПАРАЛЛЕЛЬНАЯ ОБРАБОТКА ЗАВЕРШЕНА: {len(downloaded_files)} файлов")
-    return downloaded_files
-
-
-def merge_isolated_results(base_download_dir, isolated_dirs, progress_callback=None):
-    """
-    Объединяет результаты из изолированных директорий в основную
-
-    Args:
-        base_download_dir: основная директория для результатов
-        isolated_dirs: список изолированных директорий
-        progress_callback: функция для обновления прогресса
-    """
-    print(f"\n🔄 ОБЪЕДИНЕНИЕ РЕЗУЛЬТАТОВ: {len(isolated_dirs)} изолированных директорий")
-
-    merged_files = []
-
-    for i, isolated_dir in enumerate(isolated_dirs):
-        if not os.path.exists(isolated_dir):
-            continue
-
-        # Ищем файлы в изолированной директории
-        files = glob.glob(os.path.join(isolated_dir, "*.xlsx"))
-
-        for file_path in files:
-            # Копируем файл в основную директорию с новым именем
-            filename = os.path.basename(file_path)
-            new_filename = f"merged_{i+1}_{filename}"
-            new_filepath = os.path.join(base_download_dir, new_filename)
-
-            try:
-                shutil.copy2(file_path, new_filepath)
-                merged_files.append(new_filepath)
-                print(f"✅ Скопирован: {filename} -> {new_filename}")
-            except Exception as e:
-                print(f"❌ Ошибка копирования {filename}: {e}")
-
-        # Очищаем изолированную директорию
-        try:
-            shutil.rmtree(isolated_dir, ignore_errors=True)
-            print(f"🧹 Очищена изолированная директория: {isolated_dir}")
-        except Exception as e:
-            print(f"❌ Ошибка очистки {isolated_dir}: {e}")
-
-    print(f"🏁 Объединение завершено: {len(merged_files)} файлов")
-    return merged_files
 
 
 def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, headless=True, progress_callback=None):
@@ -1406,7 +1213,9 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
     Обрабатывает файл поставщика: извлекает EAN коды, 
     разбивает на группы и получает данные из TradeWatch
     
-    Railway Hobby план: параллельная обработка с большими батчами
+    АВТОМАТИЧЕСКИ ВЫБИРАЕТ СТРАТЕГИЮ:
+    - Hobby план: параллельная обработка с большими батчами
+    - Бесплатный план: последовательная обработка с малыми батчами
     
     Args:
         supplier_file_path: путь к файлу поставщика
@@ -1469,16 +1278,15 @@ def process_supplier_file_with_tradewatch(supplier_file_path, download_dir, head
                     print(f"Не удалось удалить файл {old_file}: {e}")
                     pass
         
-        # 🚀 HOBBY ПЛАН: Изолированная параллельная обработка
+        # � ОПТИМИЗАЦИЯ ДЛЯ HOBBY ПЛАНА: Выбираем стратегию обработки
         parallel_sessions = get_parallel_sessions()
         
-        print(f"🚀 Railway Hobby план - запускаем параллельную обработку")
-        print(f"� Параллельные сессии: {parallel_sessions}")
-        print(f"📦 Размер батча: {batch_size} EAN кодов")
-        print(f"📁 Рабочая директория: {download_dir}")
-        print(f"� Файл поставщика: {supplier_file_path}")
-        
-        downloaded_files = process_batches_parallel_isolated(batches, download_dir, headless, progress_callback, parallel_sessions)
+        if parallel_sessions > 1:
+            print(f"🚀 HOBBY ПЛАН: Параллельная обработка {parallel_sessions} сессий")
+            downloaded_files = process_batches_parallel(batches, download_dir, headless, progress_callback, parallel_sessions)
+        else:
+            print(f"🔥 БАЗОВЫЙ ПЛАН: Последовательная обработка")
+            downloaded_files = process_batches_sequential(batches, download_dir, headless, progress_callback)
         
         print(f"\n🏁 Обработка завершена. Загружено {len(downloaded_files)} файлов из {len(batches)} групп")
         
@@ -1753,280 +1561,6 @@ def process_batch_with_new_browser(ean_codes_batch, download_dir, batch_number, 
         print(f"❌ Ошибка при обработке группы {batch_number} в новой сессии: {e}")
         return None
     
-    finally:
-        # 🔥 КРИТИЧЕСКИ ВАЖНО: Закрываем браузер после каждой группы
-        print(f"🔒 Закрываем браузер для группы {batch_number}")
-        driver.quit()
-
-
-def process_batch_with_new_browser_isolated(ean_codes_batch, download_dir, batch_number, headless=True):
-    """
-    🔥 Обрабатывает группу EAN кодов в НОВОЙ сессии браузера в изолированной директории
-
-    Args:
-        ean_codes_batch: список EAN кодов для обработки
-        download_dir: изолированная директория для скачивания файлов
-        batch_number: номер группы для идентификации файла
-        headless: запуск в headless режиме (True) или с GUI (False)
-
-    Returns:
-        str: путь к скачанному файлу или None если ошибка
-    """
-    if not ean_codes_batch:
-        print("Пустая группа EAN кодов")
-        return None
-
-    # Настройка драйвера Chrome для НОВОЙ сессии
-    options = webdriver.ChromeOptions()
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    if headless:
-        options.add_argument("--headless")
-
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-logging")
-    options.add_argument("--disable-web-security")
-    options.add_argument("--allow-running-insecure-content")
-
-    # 🔥 КРИТИЧЕСКИ ВАЖНО: Отключаем ВСЕ виды кеширования
-    options.add_argument("--disable-application-cache")
-    options.add_argument("--disable-background-timer-throttling")
-    options.add_argument("--disable-backgrounding-occluded-windows")
-    options.add_argument("--disable-renderer-backgrounding")
-    options.add_argument("--disable-features=TranslateUI")
-    options.add_argument("--disable-default-apps")
-    options.add_argument("--disable-sync")
-    options.add_argument("--disable-background-networking")
-    options.add_argument("--single-process")
-    options.add_argument("--no-first-run")
-    options.add_argument("--disable-plugins")
-    options.add_argument("--disable-plugins-discovery")
-    options.add_argument("--disable-preconnect")
-    options.add_argument("--disable-hang-monitor")
-    options.add_argument("--disable-client-side-phishing-detection")
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--disable-prompt-on-repost")
-    options.add_argument("--disable-renderer-backgrounding")
-    options.add_argument("--disable-ipc-flooding-protection")
-
-    # Настройка для автоматической загрузки файлов
-    download_path = Path(download_dir)
-    prefs = {
-        "download.default_directory": str(download_path.absolute()),
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing.enabled": True
-    }
-    options.add_experimental_option("prefs", prefs)
-
-    # 🆕 СОЗДАЕМ НОВЫЙ ДРАЙВЕР для каждой группы с retry логикой
-    driver = None
-    max_retries = 5  # Увеличиваем количество попыток
-
-    for attempt in range(max_retries):
-        try:
-            print(f"🔄 Попытка создания Chrome драйвера {attempt + 1}/{max_retries}")
-
-            # Агрессивная очистка перед каждой попыткой
-            cleanup_chrome_temp_dirs()
-
-            # На последней попытке используем инкогнито режим
-            if attempt >= 3:
-                print("🔒 Переключаемся в инкогнито режим для последней попытки")
-                options.add_argument("--incognito")
-                options.add_argument("--disable-web-security")
-                options.add_argument("--disable-features=VizDisplayCompositor")
-
-            service = get_chrome_service()
-            driver = webdriver.Chrome(service=service, options=options)
-            print(f"✅ Chrome драйвер создан успешно (попытка {attempt + 1})")
-            break
-
-        except Exception as e:
-            print(f"❌ Ошибка создания Chrome драйвера (попытка {attempt + 1}/{max_retries}): {e}")
-
-            if attempt < max_retries - 1:
-                # Очищаем директории и ждем перед следующей попыткой
-                cleanup_chrome_temp_dirs()
-
-                # Прогрессивное время ожидания с увеличением
-                wait_time = 3 * (attempt + 1)  # 3s, 6s, 9s, 12s
-                print(f"⏳ Ждем {wait_time} секунд перед следующей попыткой...")
-                time.sleep(wait_time)
-
-                # Дополнительная очистка процессов
-                try:
-                    import subprocess
-                    subprocess.run(['pkill', '-9', '-f', 'chrom'], capture_output=True)
-                    time.sleep(1)
-                except:
-                    pass
-            else:
-                print("❌ Превышено максимальное количество попыток создания драйвера")
-                return None
-
-    if not driver:
-        print("❌ Не удалось создать Chrome драйвер после всех попыток")
-        return None
-
-    try:
-        print(f"Обработка группы {batch_number} с {len(ean_codes_batch)} EAN кодами...")
-
-        # Форматируем EAN коды в 13-цифровой формат
-        formatted_ean_codes = []
-        for code in ean_codes_batch:
-            formatted_code = format_ean_to_13_digits(code)
-            if formatted_code:
-                formatted_ean_codes.append(formatted_code)
-
-        if not formatted_ean_codes:
-            print("Нет валидных EAN кодов после форматирования")
-            return None
-
-        print(f"Отформатировано {len(formatted_ean_codes)} EAN кодов в 13-цифровой формат")
-
-        # Соединяем отформатированные EAN коды в одну строку через пробел
-        ean_codes_string = ' '.join(formatted_ean_codes)
-        print(f"DEBUG: Обрабатываем группу {batch_number} с EAN кодами: {ean_codes_string[:100]}...")
-
-        # Переход на страницу входа
-        driver.get("https://tradewatch.pl/login.jsf")
-
-        # Ждем загрузки страницы
-        wait = WebDriverWait(driver, 10)
-
-        # Ищем поле для email
-        email_field = wait.until(EC.presence_of_element_located((By.NAME, "j_username")))
-
-        # Вводим email
-        email_field.clear()
-        email_field.send_keys(TRADEWATCH_EMAIL)
-
-        # Ищем поле для пароля
-        password_field = driver.find_element(By.NAME, "j_password")
-
-        # Вводим пароль
-        password_field.clear()
-        password_field.send_keys(TRADEWATCH_PASSWORD)
-
-        # Ищем кнопку входа
-        login_button = driver.find_element(By.NAME, "btnLogin")
-
-        # Нажимаем кнопку входа
-        login_button.click()
-
-        # Ждем немного после входа
-        time.sleep(3)
-
-        # Проверяем успешность входа
-        current_url = driver.current_url
-
-        if "login.jsf" not in current_url:
-            print("Успешный вход в систему!")
-
-            # Переходим на страницу EAN Price Report
-            driver.get("https://tradewatch.pl/report/ean-price-report.jsf")
-            time.sleep(3)
-
-            try:
-                # Ищем поле для ввода EAN кодов
-                ean_field = wait.until(EC.presence_of_element_located((By.ID, "eansPhrase")))
-
-                # Тщательно очищаем поле
-                clear_ean_field_thoroughly(driver, ean_field, batch_number)
-
-                # Безопасно вставляем EAN коды
-                if not insert_ean_codes_safely(driver, ean_field, ean_codes_string, batch_number):
-                    print(f"Ошибка: не удалось вставить EAN коды для группы {batch_number}")
-                    return None
-
-                # Ждем немного
-                time.sleep(1)
-
-                # Ищем кнопку "Generuj"
-                generate_button = driver.find_element(By.ID, "j_idt703")
-
-                # Нажимаем кнопку
-                generate_button.click()
-
-                # Ждем обработки
-                print("Ждем обработки запроса...")
-                time.sleep(5)
-
-                # Ждем появления результатов
-                print("Ждем появления результатов...")
-                time.sleep(3)
-
-                # Ищем кнопку "Eksport do XLS"
-                try:
-                    export_button = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Eksport do XLS")))
-
-                    # Нажимаем кнопку экспорта
-                    export_button.click()
-
-                    # Ждем начала загрузки файла
-                    print("Ждем загрузки файла...")
-
-                    # Ждем появления файла с проверкой каждые 2 секунды
-                    max_wait_time = 60
-                    wait_interval = 2
-                    waited_time = 0
-
-                    downloaded_file_found = False
-
-                    while waited_time < max_wait_time:
-                        time.sleep(wait_interval)
-                        waited_time += wait_interval
-
-                        # Ищем скачанный файл (только оригинальное имя)
-                        downloaded_files = glob.glob(os.path.join(download_dir, "TradeWatch - raport konkurencji.xlsx"))
-                        if downloaded_files:
-                            # Проверяем, что файл полностью скачался
-                            latest_file = downloaded_files[0]
-
-                            # Ждем немного и проверяем, что размер файла не изменился
-                            initial_size = os.path.getsize(latest_file)
-                            time.sleep(3)
-
-                            try:
-                                final_size = os.path.getsize(latest_file)
-                                if initial_size == final_size and final_size > 0:
-                                    print(f"Файл для группы {batch_number} загружен: {latest_file} (размер: {final_size} байт)")
-                                    downloaded_file_found = True
-                                    break
-                                else:
-                                    print(f"Файл еще скачивается... (размер: {final_size} байт)")
-                            except:
-                                print(f"Файл заблокирован, продолжаем ждать...")
-                                continue
-                        else:
-                            print(f"Ожидание файла... ({waited_time}/{max_wait_time} сек)")
-
-                    if downloaded_file_found:
-                        # Возвращаем путь к файлу в изолированной директории
-                        return latest_file
-                    else:
-                        print(f"Файл для группы {batch_number} не найден после {max_wait_time} секунд ожидания")
-                        return None
-
-                except Exception as export_error:
-                    print(f"Ошибка при экспорте группы {batch_number}: {export_error}")
-                    return None
-
-            except Exception as e:
-                print(f"Ошибка при работе с EAN кодами группы {batch_number}: {e}")
-                return None
-        else:
-            print("Ошибка при входе в систему")
-            return None
-
-    except Exception as e:
-        print(f"Произошла ошибка при обработке группы {batch_number}: {e}")
-        return None
-
     finally:
         # 🔥 КРИТИЧЕСКИ ВАЖНО: Закрываем браузер после каждой группы
         print(f"🔒 Закрываем браузер для группы {batch_number}")
