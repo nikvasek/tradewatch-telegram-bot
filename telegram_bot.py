@@ -44,8 +44,8 @@ file_handler = logging.FileHandler("bot_activity.log")
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 activity_logger.addHandler(file_handler)
 
-# Токен бота (замените на ваш токен или используйте переменную окружения)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7402798055:AAGEgTHl5NFPyZ5QCUX7OIjDrNzENqSMGeI")
+# Токен бота (используйте переменную окружения для безопасности)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8196649413:AAHQ6KmQgBTfYtC3MeFQRFHE5L37CKQvJlw")
 
 # ID владельца бота (замените на ваш Telegram ID или используйте переменную окружения)  
 OWNER_ID = int(os.getenv("OWNER_ID", "6755735414"))
@@ -183,7 +183,9 @@ class ProcessingTimer:
 
 class TelegramBot:
     def __init__(self, token: str):
+        logger.info(f"🔧 Инициализация TelegramBot с токеном: {token[:10]}...")
         self.token = token
+
         # Создаём Application с увеличенными таймаутами для больших файлов
         from telegram.request import HTTPXRequest
         request = HTTPXRequest(
@@ -193,7 +195,23 @@ class TelegramBot:
             connect_timeout=60  # 1 минута на подключение
         )
         self.application = Application.builder().token(token).request(request).build()
+        logger.info("✅ Application создана успешно")
+
+        # ДОБАВИТЬ: Логирование конфигурации при запуске бота
+        print("🚀 ЗАПУСК TELEGRAM БОТА")
+        print("=" * 50)
+        print("🚀 Railway Hobby план - максимальная производительность")
+
+        from tradewatch_login import get_parallel_sessions, get_batch_size
+        parallel_sessions = get_parallel_sessions()
+        batch_size = get_batch_size()
+        print(f"🔄 Количество параллельных сессий: {parallel_sessions}")
+        print(f"📦 Размер батча: {batch_size} EAN кодов")
+        print(f"⚡ Расчетная производительность: {batch_size * parallel_sessions} EAN одновременно")
+        print("=" * 50)
+
         self.setup_handlers()
+        logger.info("✅ Обработчики настроены успешно")
 
     async def setup_bot_commands(self):
         """Настройка команд бота в меню"""
