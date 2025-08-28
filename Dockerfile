@@ -1,4 +1,4 @@
-# Railway Hobby Plan - Selenium Chrome Dockerfile (с ускорением 4x) - FORCE REBUILD v3.0
+# Railway Free Plan - Selenium Chrome Dockerfile - FORCE REBUILD v3.0
 FROM selenium/standalone-chrome:latest
 
 # Переключение на root для установки Python
