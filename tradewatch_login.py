@@ -23,16 +23,8 @@ TRADEWATCH_PASSWORD = os.getenv("TRADEWATCH_PASSWORD", "TRADEWATCH_PASSWORD")
 
 def is_hobby_plan():
     """Определяет, используется ли Railway Hobby план"""
-    # Принудительно включаем Hobby режим для ускорения
-    # TODO: Установить RAILWAY_PLAN=hobby в Railway Dashboard
-    
-    # Проверяем наличие переменной окружения или другой индикации Hobby плана
-    hobby_indicators = [
-        os.environ.get('RAILWAY_PLAN') == 'hobby',
-        os.environ.get('MEMORY_LIMIT', '512') != '512',  # Больше памяти = Hobby
-        'HOBBY' in os.environ.get('DEPLOYMENT_TYPE', '').upper(),
-        True  # ВРЕМЕННО: Принудительно включаем Hobby режим
-    ]
+    # Удален Hobby план - всегда возвращаем False для использования бесплатного плана
+    return False
 
 def get_railway_chrome_options(batch_number=None):
     """
@@ -69,42 +61,28 @@ def get_railway_chrome_options(batch_number=None):
     
     # Проверяем переменные окружения Railway
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        is_hobby = os.getenv('RAILWAY_PLAN') == 'hobby' or os.getenv('RAILWAY_MEMORY_LIMIT', '512') != '512'
-        
-        if is_hobby:
-            print("� Railway Hobby план - используем настройки для максимальной скорости")
-            # Настройки для скорости на Hobby плане
-            options.add_argument("--max_old_space_size=8192")  # Больше памяти
-            options.add_argument("--enable-fast-unload")
-            options.add_argument("--aggressive-cache-discard")
-        else:
-            print("🚂 Railway бесплатный план - используем настройки для стабильности")
-            options.add_argument("--memory-pressure-off")
-            options.add_argument("--max_old_space_size=4096")
-            # Дополнительные настройки для экономии памяти на бесплатном плане
-            options.add_argument("--disable-background-timer-throttling")
-            options.add_argument("--disable-backing-store-limit")
-            options.add_argument("--disable-hang-monitor")
-            options.add_argument("--disable-client-side-phishing-detection")
-            options.add_argument("--disable-popup-blocking")
-            options.add_argument("--disable-prompt-on-repost")
-            options.add_argument("--disable-renderer-backgrounding")
-            options.add_argument("--disable-ipc-flooding-protection")
+        print("🚂 Railway бесплатный план - используем настройки для стабильности")
+        options.add_argument("--memory-pressure-off")
+        options.add_argument("--max_old_space_size=4096")
+        # Дополнительные настройки для экономии памяти на бесплатном плане
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backing-store-limit")
+        options.add_argument("--disable-hang-monitor")
+        options.add_argument("--disable-client-side-phishing-detection")
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--disable-prompt-on-repost")
+        options.add_argument("--disable-renderer-backgrounding")
+        options.add_argument("--disable-ipc-flooding-protection")
     
     return options
 
 def get_batch_size():
     """
-    Получить оптимальный размер батча в зависимости от окружения и плана
+    Получить оптимальный размер батча в зависимости от окружения
     """
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        # Используем нашу новую функцию is_hobby_plan()
-        if is_hobby_plan():
-            print("🚀 Railway Hobby план - используем батчи по 480 кодов для максимальной скорости")
-            return 480  # Оптимальный размер для Hobby плана
-        else:
-            print("🚂 Railway бесплатный план - используем батчи по 480 кодов")
-            return 480   # Увеличенные батчи для бесплатного плана
+        print(" Railway бесплатный план - используем батчи по 200 кодов")
+        return 200   # Стандартный размер для бесплатного плана
     else:
         print("💻 Локальное окружение - используем батчи по 300 кодов")
         return 300
@@ -114,13 +92,8 @@ def get_parallel_sessions():
     Получить количество параллельных сессий для обработки
     """
     if os.getenv('RAILWAY_ENVIRONMENT_NAME'):
-        # Используем нашу функцию is_hobby_plan() вместо прямой проверки переменных
-        if is_hobby_plan():
-            print("🚀 Hobby план - используем 6 параллельные сессии для максимальной скорости")
-            return 6  # 6 параллельные сессии для Hobby плана (максимальное ускорение)
-        else:
-            print("🚂 Бесплатный план - используем 1 сессию")
-            return 1
+        print("� Railway бесплатный план - используем 1 сессию")
+        return 1  # Только 1 сессия для бесплатного плана
     else:
         print("💻 Локальное окружение - используем 2 сессии")
         return 2

@@ -200,7 +200,7 @@ class TelegramBot:
         # ДОБАВИТЬ: Логирование конфигурации при запуске бота
         print("🚀 ЗАПУСК TELEGRAM БОТА")
         print("=" * 50)
-        print("🚀 Railway Hobby план - максимальная производительность")
+        print("� Railway бесплатный план - стандартная производительность")
 
         from tradewatch_login import get_parallel_sessions, get_batch_size
         parallel_sessions = get_parallel_sessions()
